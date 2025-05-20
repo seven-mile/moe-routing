@@ -116,9 +116,10 @@ def main():
 
     # Save Table 1 data
     if all_request_data_table1:
-        # Convert list of dicts to a more structured format for npz, e.g., dict of lists/arrays
-        table1_np_data = {key: np.array([d[key] for d in all_request_data_table1]) for key in all_request_data_table1[0]}
-        np.savez_compressed(os.path.join("data/request_text", "all_request_text_data.npz"), **table1_np_data)
+        # Convert it to parquet too
+        df_table1 = pd.DataFrame(all_request_data_table1)
+        parquet_file_path = os.path.join("data/request_text", "all_request_text_data.parquet")
+        df_table1.to_parquet(parquet_file_path, index=False)
     
     print("Processing complete. Data saved to data/")
 
