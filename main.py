@@ -1,9 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.models.qwen3_moe import Qwen3MoeForCausalLM
-from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeSparseMoeBlock
 
 from datasets import load_dataset
-import pandas as pd
 
 from tqdm import tqdm
 
@@ -11,157 +8,119 @@ import torch
 import torch.nn.functional as F
 
 import pdb
-
-def shapes_to_string(shapes):
-    if isinstance(shapes, torch.Tensor):
-        return f"{shapes.shape}"
-    elif isinstance(shapes, (tuple, list)):
-        return f"({', '.join(map(shapes_to_string, shapes))})"
-    elif isinstance(shapes, dict):
-        return f"{{{', '.join(f'{k}: {shapes_to_string(v)}' for k, v in shapes.items())}}}"
-    else:
-        assert False, f"Unsupported type: {type(shapes)}"
-
-def remove_conv_response(entry):
-    # Remove the last response from assistant if it exists
-    if entry['conversation'][-1]['role'] == 'assistant':
-        entry['conversation'].pop()
-    return entry
-
-def patch_model(model: Qwen3MoeForCausalLM, output_router_logits: list):
-    handles = []
-
-    def get_hook(lid: int):
-        def hook(module, input, output):
-            print(f"Layer {lid} - Input: {shapes_to_string(input)}, Output: {shapes_to_string(output)}", flush=True)
-            # output: (batch_size * seq_len, num_experts)
-            assert output.ndim == 2, f"Expected output to be 2D tensor, got {output.ndim}D"
-            # Should collect all seq parts. e.g. 512(prefill), 1, 1, ... (decode)
-            output_router_logits[lid].append(output)
-        return hook
-
-    for lid, layer in enumerate(model.model.layers):
-        layer: Qwen3MoeDecoderLayer
-        if not isinstance(layer.mlp, Qwen3MoeSparseMoeBlock):
-            continue
-        assert isinstance(layer.mlp.gate, torch.nn.Linear), "Expected gate to be a Linear layer"
-        output_router_logits.append([])
-        handles.append(layer.mlp.gate.register_forward_hook(get_hook(lid)))
-
-    return model, handles
+import numpy as np
+import pandas as pd
+import os
 
 def main():
-    BATCH_SIZE = 32
-    TOTAL_ENTRIES = 2 # Keep it small for testing, can be increased
-    dataset = load_dataset("lmsys/lmsys-chat-1m", split="train")
-
-    active_data = dataset.map(remove_conv_response, num_proc=32) \
-        .filter(lambda x: len(x['conversation']) > 0, num_proc=32) \
-        .batch(BATCH_SIZE, num_proc=32) \
-        .take(TOTAL_ENTRIES)
+    TOTAL_ENTRIES = 256
 
     main_device = 'cuda:0'
-    # It's good practice to specify torch_dtype for large models
-    # For A100/H100, bfloat16 is good. For older GPUs, float16.
-    # If 'auto' device_map might put parts on CPU, ensure dtype compatibility or manage manually.
-    try:
-        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_device, torch_dtype=torch.bfloat16, trust_remote_code=True)
-    except Exception as e:
-        print(f"Failed to load model with bfloat16, trying float16: {e}")
-        try:
-            model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_device, torch_dtype=torch.float16, trust_remote_code=True)
-        except Exception as e2:
-            print(f"Failed to load model with float16, trying default dtype: {e2}")
-            model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_device, trust_remote_code=True)
 
-    output_router_logits = []
+    # Create directories for output
+    os.makedirs("data/request_text", exist_ok=True)
+    os.makedirs("data/routing_scores", exist_ok=True)
 
-    model, handles = patch_model(model, output_router_logits)
+    dataset = load_dataset("lmsys/lmsys-chat-1m", split="train")
+    active_data = dataset.take(TOTAL_ENTRIES)
+
+    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_device, torch_dtype=torch.bfloat16, trust_remote_code=True)
+    model.config.output_router_logits = True
+    model.config.use_cache = False # Important for getting all router logits
 
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B", trust_remote_code=True)
-    
-    ppls = []
-    all_gating_data_rows = [] # To store data for the DataFrame
+
+    # Data storage for Table 1
+    all_request_data_table1 = []
 
     for entry_idx, entry in tqdm(enumerate(active_data), total=TOTAL_ENTRIES, desc="Processing Entries"):
         conv = entry['conversation']
-        this_batch_size = len(conv)
         chat_string = tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=True)
 
         inputs = tokenizer(chat_string, padding=True, padding_side='left', return_tensors="pt").to(model.device)
 
-        input_length = inputs.input_ids.size(1)
+        input_ids_tensor = inputs.input_ids
+        input_length = input_ids_tensor.size(1)
 
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=10,
-            return_dict_in_generate=True,
-            output_logits=False, # For perplexity
-            output_hidden_states=False, # Not strictly needed for this task
-        )
+        # Store data for Table 1
+        for token_pos in range(input_length):
+            all_request_data_table1.append({
+                'request_id': entry_idx,
+                'token_position_in_sequence': token_pos,
+                'token_actual_id': input_ids_tensor[0, token_pos].item()
+            })
 
-        # Process and store gating scores
+        # Get outputs including router_logits
+        # Ensure the model is configured to output router_logits
+        # The model call might need to be adjusted if generate is used,
+        # but here we are doing a forward pass.
+        with torch.no_grad():
+            outputs = model(**inputs)
         
-        num_layers_to_process = len(output_router_logits)
+        # router_logits shape: (batch_size, num_tokens, num_layers, num_experts)
+        # Since we process one entry at a time, batch_size is 1.
+        # For Qwen2 MoE, num_layers might be the number of MoE layers, not total layers.
+        # And num_experts is specific to the MoE architecture.
+        
+        if hasattr(outputs, 'router_logits') and outputs.router_logits is not None:
+            # Squeeze batch dimension if it's 1, assuming batch_size is 1 for this loop
+            router_logits_tensor = torch.stack(outputs.router_logits, dim=0) # Shape: (num_layers, num_tokens, num_experts)
+            
+            # Softmax across experts to get routing scores
+            router_logits_tensor = F.softmax(router_logits_tensor, dim=-1)
+            
+            # Check if the router_logits tensor is empty (e.g., if num_tokens from model output is 0)
+            if router_logits_tensor.numel() == 0:
+                print(f"Warning: router_logits tensor for entry {entry_idx} is empty. Skipping Parquet generation for this entry.")
+            else:
+                num_layers, num_tokens, num_experts = router_logits_tensor.shape
+                
+                # Efficiently create DataFrame for Table 2 using NumPy vectorization.
+                # 'token_position_in_sequence' in the DataFrame corresponds to the token index
+                # within the model's input sequence (which router_logits are aligned with).
+                
+                # Convert router_logits tensor to NumPy array on CPU
+                router_logits_np = router_logits_tensor.to(device='cpu', dtype=torch.float32).numpy()
+                del router_logits_tensor
 
-        for layer_idx in range(num_layers_to_process):
-            # Shape: (bseq, num_experts)
-            router_scores_list = output_router_logits[layer_idx]
-            num_experts = router_scores_list[0].size(-1)
+                # Create index arrays for each dimension
+                layer_indices_np, token_indices_np, expert_indices_np = np.indices(router_logits_np.shape)
 
-            # Shape: (bs, seqlen, num_experts)
-            router_scores = torch.cat([
-                x.reshape(this_batch_size, -1, num_experts)
-                for x in router_scores_list], dim=1)
-            router_scores_list.clear()
+                # Flatten all arrays to 1D for DataFrame columns
+                flat_layer_ids = layer_indices_np.ravel()
+                flat_token_positions = token_indices_np.ravel()
+                flat_expert_ids = expert_indices_np.ravel()
+                flat_routing_scores = router_logits_np.ravel()
+                
+                # Create request_id array, repeating entry_idx for all routing entries
+                total_routing_entries = router_logits_np.size
+                request_id_array = np.full(total_routing_entries, entry_idx, dtype=np.int32) # Assuming entry_idx fits int32
 
-            for batch_idx in range(this_batch_size):
-                scores_tensor_for_seq = router_scores[batch_idx].cpu().float() # Shape: (full_seq_len, num_experts), ensure float for pd
-                full_token_ids = outputs.sequences[batch_idx].cpu() # (full_seq_len)
-                assert full_token_ids.size(0) == scores_tensor_for_seq.size(0) + 1, f"Mismatch in token IDs and scores length: {full_token_ids.size(0)} vs {scores_tensor_for_seq.size(0) + 1}"
-
-                for token_pos_in_seq in range(scores_tensor_for_seq.size(0)):
-                    is_prompt = token_pos_in_seq < input_length
-                    token_id_val = full_token_ids[token_pos_in_seq].item()
-                    
-                    # Decode individual tokens. skip_special_tokens=False to see all tokens.
-                    # clean_up_tokenization_spaces=False to preserve tokenization artifacts like leading spaces.
-                    token_str = tokenizer.decode([token_id_val], skip_special_tokens=False, clean_up_tokenization_spaces=False)
-                    gating_scores_for_token = scores_tensor_for_seq[token_pos_in_seq].numpy()
-                    
-                    is_special = token_id_val in tokenizer.all_special_ids
-
-                    row_data = {
-                        "entry_idx": entry_idx,
-                        "batch_idx": batch_idx,
-                        "token_pos_in_full_sequence": token_pos_in_seq,
-                        "token_id": token_id_val,
-                        "token_str": token_str,
-                        "is_generated_token": not is_prompt,
-                        "is_special_token": is_special,
-                        "model_layer_idx": layer_idx,
-                        "expert_scores": gating_scores_for_token,
-                    }
-                    
-                    all_gating_data_rows.append(row_data)
+                # Create DataFrame
+                df_table2 = pd.DataFrame({
+                    'request_id': request_id_array,
+                    'token_position_in_sequence': flat_token_positions,
+                    'layer_id': flat_layer_ids,
+                    'expert_id': flat_expert_ids,
+                    'routing_score': flat_routing_scores
+                })
+                
+                # Optional: Convert routing_score to float16 (FP16) if desired for storage, though Parquet handles float32/64 well.
+                # df_table2['routing_score'] = df_table2['routing_score'].astype(np.float16)
+                
+                parquet_file_path = os.path.join("data/routing_scores", f"request_{entry_idx}_routing_scores.parquet")
+                df_table2.to_parquet(parquet_file_path, index=False)
+        else:
+            print(f"Warning: router_logits not found in outputs for entry {entry_idx}. Ensure model.config.output_router_logits=True.")
 
 
-    # After the loop, create DataFrame and save to CSV
-    if all_gating_data_rows:
-        gating_df = pd.DataFrame(all_gating_data_rows)
-        try:
-            gating_df.to_pickle("./data/gating_scores_and_tokens.pkl")
-            print("\nSuccessfully exported gating scores and token data")
-        except Exception as e:
-            print(f"\nError exporting DataFrame to CSV: {e}")
-    else:
-        print("\nNo gating data was collected. CSV file not created.")
-
-    if ppls:
-        print("\nPerplexities:", ppls, flush=True)
-        print('Average ppl:', sum(ppls) / len(ppls), flush=True)
-    else:
-        print("\nNo perplexity scores were calculated.", flush=True)
+    # Save Table 1 data
+    if all_request_data_table1:
+        # Convert list of dicts to a more structured format for npz, e.g., dict of lists/arrays
+        table1_np_data = {key: np.array([d[key] for d in all_request_data_table1]) for key in all_request_data_table1[0]}
+        np.savez_compressed(os.path.join("data/request_text", "all_request_text_data.npz"), **table1_np_data)
+    
+    print("Processing complete. Data saved to data/")
 
 if __name__ == "__main__":
     main()
