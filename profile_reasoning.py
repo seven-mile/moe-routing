@@ -1,6 +1,21 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from datasets import load_dataset
+from datasets import load_dataset, Features, Value
+reasoning_features = Features({
+    "messages": [
+        {
+            "role": Value("string"),
+            "content": Value("string"),
+            "info": {
+                "source": Value("string"),
+                "reference_answer": Value("string"),
+                "test_case": Value("string"),
+                "think_content": Value("string"),
+                "answer_content": Value("string")
+            }
+        }
+    ]
+})
 
 from tqdm import tqdm
 
@@ -14,40 +29,57 @@ import os
 
 def main():
     TOTAL_ENTRIES = 256
+    NUM_PROC = 32
 
-    main_device = 'cuda:2'
+    main_device = 'auto'
+
+    data_path = "data/reasoning"
 
     # Create directories for output
-    os.makedirs("data/qwen15/request_text", exist_ok=True)
-    os.makedirs("data/qwen15/routing_scores", exist_ok=True)
+    text_data_dir = os.path.join(data_path, "request_text")
+    os.makedirs(text_data_dir, exist_ok=True)
+    routing_data_dir = os.path.join(data_path, "routing_scores")
+    os.makedirs(routing_data_dir, exist_ok=True)
 
-    dataset = load_dataset("lmsys/lmsys-chat-1m", split="train")
-    active_data = dataset.select(range(TOTAL_ENTRIES))
+    dataset = load_dataset("a-m-team/AM-DeepSeek-R1-Distilled-1.4M", "am_0.9M", split="train", features=reasoning_features, num_proc=32)
+    active_data = dataset.take(TOTAL_ENTRIES)
 
-    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map=main_device, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_device, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", trust_remote_code=True)
     model.config.output_router_logits = True
     model.config.use_cache = False # Important for getting all router logits
 
-    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B", trust_remote_code=True)
+    
+    think_open = tokenizer.encode("<think>")[0]
+    think_close = tokenizer.encode("</think>")[0]
 
     # Data storage for Table 1
     all_request_data_table1 = []
 
     for entry_idx, entry in tqdm(enumerate(active_data), total=TOTAL_ENTRIES, desc="Processing Entries"):
-        conv = entry['conversation']
+        conv = entry['messages']
         chat_string = tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=True)
 
-        inputs = tokenizer(chat_string, padding=True, padding_side='left', return_tensors="pt").to(model.device)
+        inputs = tokenizer(chat_string, padding=True, padding_side='left', return_tensors="pt")
 
+        # Get the think part spans
+        think_open_positions = (inputs.input_ids[0] == think_open).nonzero(as_tuple=True)[0].tolist()
+        think_close_positions = (inputs.input_ids[0] == think_close).nonzero(as_tuple=True)[0].tolist()
+        think_spans = list(zip(think_open_positions, think_close_positions))
+
+        inputs = inputs.to(model.device)
         input_ids_tensor = inputs.input_ids
         input_length = input_ids_tensor.size(1)
 
         # Store data for Table 1
         for token_pos in range(input_length):
+            is_think_part = any(start <= token_pos <= end for start, end in think_spans)
+
             all_request_data_table1.append({
                 'request_id': entry_idx,
                 'token_position_in_sequence': token_pos,
-                'token_actual_id': input_ids_tensor[0, token_pos].item()
+                'token_actual_id': input_ids_tensor[0, token_pos].item(),
+                'is_think_part': is_think_part,
             })
 
         # Get outputs including router_logits
@@ -108,7 +140,7 @@ def main():
                 # Optional: Convert routing_score to float16 (FP16) if desired for storage, though Parquet handles float32/64 well.
                 # df_table2['routing_score'] = df_table2['routing_score'].astype(np.float16)
                 
-                parquet_file_path = os.path.join("data/qwen15/routing_scores", f"request_{entry_idx}_routing_scores.parquet")
+                parquet_file_path = os.path.join(routing_data_dir, f"request_{entry_idx}_routing_scores.parquet")
                 df_table2.to_parquet(parquet_file_path, index=False)
         else:
             print(f"Warning: router_logits not found in outputs for entry {entry_idx}. Ensure model.config.output_router_logits=True.")
@@ -118,10 +150,10 @@ def main():
     if all_request_data_table1:
         # Convert it to parquet too
         df_table1 = pd.DataFrame(all_request_data_table1)
-        parquet_file_path = os.path.join("data/qwen15/request_text", "all_request_text_data.parquet")
+        parquet_file_path = os.path.join(text_data_dir, "all_request_text_data.parquet")
         df_table1.to_parquet(parquet_file_path, index=False)
     
-    print("Processing complete. Data saved to data/qwen15/")
+    print(f"Processing complete. Data saved to {data_path}/")
 
 if __name__ == "__main__":
     main()

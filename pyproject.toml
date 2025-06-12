@@ -7,8 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "autoawq>=0.2.9",
     "datasets>=3.6.0",
+    "flash-attn>=2.7.4.post1",
     "matplotlib>=3.10.3",
     "pyarrow>=20.0.0",
+    "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
     "transformers>=4.51.3",
@@ -18,3 +20,7 @@ dependencies = [
 dev = [
     "ipykernel>=6.29.5",
 ]
+
+[tool.uv]
+index-url = "https://mirrors.sustech.edu.cn/pypi/web/simple"
+no-build-isolation-package = ['flash-attn']
