@@ -4,11 +4,11 @@ import numpy as np
 from tqdm import tqdm
 import os
 
-score_files = glob.glob('data/dpsk/routing_scores/*.parquet')
+score_files = glob.glob('data/mixtral/routing_scores/*.parquet')
 
-num_layers = 58
-num_experts = 256
-top_k = 8
+num_layers = 32
+num_experts = 8
+top_k = 2
 
 top_ks = [top_k]
 while top_ks[-1] > 1:
@@ -38,4 +38,4 @@ for f in tqdm(score_files):
     stats[k][os.path.basename(f)] = activation_counts
 
 for k in top_ks:
-  np.savez(f'data/dpsk/activation_counts_top{k}.npz', **stats[k])
+  np.savez(f'data/mixtral/activation_counts_top{k}.npz', **stats[k])

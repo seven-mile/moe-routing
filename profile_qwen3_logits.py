@@ -51,7 +51,25 @@ for entry in tqdm(dataset.select(range(TOTAL_ENTRIES))):
   loss = cross_entropy(logits.view(-1, logits.size(-1)), target_ids.view(-1), reduction='none')
   perplexity = torch.exp(loss)
 
-  ppls.append((result, perplexity.tolist()))
-  print('PPL calc:', ppls[-1], flush=True)
+  # WARN: This is not well tested.
+  # Extract input and output tokens with their IDs and strings
+  input_ids = inputs.input_ids[0].tolist()  # Convert to list for the first (and only) batch
+  input_tokens = tokenizer.batch_decode(input_ids)
+  
+  output_ids = outputs.sequences[0, input_length:].tolist()  # Only the generated portion
+  output_tokens = tokenizer.batch_decode(output_ids)
+  
+  # Create structured data entry
+  entry_data = {
+    'generated_text': result,
+    'perplexity': perplexity.tolist(),
+    'input_token_ids': input_ids,
+    'input_tokens': input_tokens,
+    'output_token_ids': output_ids,
+    'output_tokens': output_tokens
+  }
+  
+  ppls.append(entry_data)
+  print('PPL calc:', len(ppls), 'entries processed', flush=True)
 
 torch.save(ppls, "data/logits/qwen3_ppls_32.pt")
