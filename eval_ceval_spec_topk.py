@@ -89,7 +89,7 @@ for doc in tqdm(dataset, desc="正在评估"):
     # 初始化 KV Cache，先做一次 Prefill
     with torch.no_grad():
         outputs = model(
-            cur_total_input_ids[:, -1:],
+            cur_total_input_ids[:, :-1],
             use_cache=True,
         )
         # 扔掉最后一个 token 以规避 model.generate() bug
