@@ -159,6 +159,9 @@ def main():
         cur_ids = input_ids
         base_k = model.config.num_experts_per_tok
 
+        avg_accepts = []
+        avg_topks = []
+
         # speculative loop
         with tqdm(total=args.max_think_tokens, desc="Thinking", leave=False) as pbar:
             while len(gen_ids) < args.max_think_tokens:
@@ -181,7 +184,7 @@ def main():
                 # topks = torch.where(ppls > 2.0, base_k, base_k - 1)
                 topks = torch.where(ppls < 2.0, base_k - 1, topks)
                 topks = torch.where(ppls < 1.02, base_k - 2, topks)
-                topks = torch.where(ppls < 1.004, base_k - 4, topks)
+                topks = torch.where(ppls < 1.004, base_k - 3, topks)
 
                 # verify
                 past.crop(cur_len-1)
@@ -238,18 +241,19 @@ def main():
         conn.execute(
             "INSERT INTO eval VALUES (?,?,?,?,?,?,?,?,?,?)",
             [idx, run_id,
-             doc['question'], think_text, pred, truth,
+             prompt_start, think_text, pred, truth,
              json.dumps(spec_ppls), json.dumps(spec_accept),
              json.dumps(total_topks), time.time()]
         )
         conn.commit()
 
         avg_accept = sum(spec_accept)/len(spec_accept) if spec_accept else 0
-        comm_benefit = sum(total_topks)/base_k/len(total_topks)*100 if total_topks else 0
-        print(f"#{idx} pred={pred} true={truth} accept_avg={avg_accept:.2f} comm_benefit%={comm_benefit:.2f}%")
+        avg_topk = sum(total_topks)/base_k/len(total_topks)*100 if total_topks else 0
+        print(f"#{idx} pred={pred} true={truth} accept_avg={avg_accept:.2f} topk_avg%={avg_topk:.2f}%")
+        avg_accepts.extend(spec_accept)
+        avg_topks.extend(total_topks)
 
-    acc = correct/len(ds)*100
-    print(f"Done. Accuracy={acc:.2f}%")
+    print(f"Done. acc={correct}/{len(ds)} total_accept_avg={sum(avg_accepts)/len(avg_accepts):.2f} total_topk_avg%={sum(avg_topks)/len(avg_topks):.2f}%")
 
     # 更新 run 状态
     conn.execute(
