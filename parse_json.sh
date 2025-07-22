@@ -19,7 +19,8 @@ for file in $@; do
       model_config: {
         use_assisted_topk: (.config.model_args.use_assisted_topk // false),
         assistant_ppl_to_k: .config.model_args.assistant_ppl_to_k,
-        random_shuffle_topk: (.config.model_args.random_shuffle_topk // false)
+        random_shuffle_topk: (.config.model_args.random_shuffle_topk // false),
+        assisted_topk_mask_layer_range: .config.model_args.assisted_topk_mask_layer_range
       },
       scores: {
         hellaswag: {
