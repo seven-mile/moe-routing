@@ -23,6 +23,16 @@ for file in $@; do
         assisted_topk_mask_layer_range: .config.model_args.assisted_topk_mask_layer_range
       },
       scores: {
+        arc_challenge: {
+          score: .results.arc_challenge["acc_norm,none"],
+          stderr: .results.arc_challenge["acc_norm_stderr,none"]
+        },
+        gsm8k: {
+          score: .results.gsm8k["exact_match,strict-match"],
+          stderr: .results.gsm8k["exact_match_stderr,strict-match"],
+          score_flexible: .results.gsm8k["exact_match,flexible-extract"],
+          stderr_flexible: .results.gsm8k["exact_match_stderr,flexible-extract"]
+        },
         hellaswag: {
           score: .results.hellaswag["acc_norm,none"],
           stderr: .results.hellaswag["acc_norm_stderr,none"]
@@ -30,6 +40,10 @@ for file in $@; do
         mmlu: {
           score: .results.mmlu["acc,none"],
           stderr: .results.mmlu["acc_stderr,none"]
+        },
+        truthfulqa: {
+          score: .results.truthfulqa_mc2["acc,none"],
+          stderr: .results.truthfulqa_mc2["acc_stderr,none"]
         },
         winogrande: {
           score: .results.winogrande["acc,none"],
