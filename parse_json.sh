@@ -19,8 +19,9 @@ for file in $@; do
       model_config: {
         use_assisted_topk: (.config.model_args.use_assisted_topk // false),
         assistant_ppl_to_k: .config.model_args.assistant_ppl_to_k,
-        random_shuffle_topk: (.config.model_args.random_shuffle_topk // false),
-        assisted_topk_mask_layer_range: .config.model_args.assisted_topk_mask_layer_range
+        shuffle_topk: .config.model_args.shuffle_topk,
+        assisted_topk_mask_layer_range: .config.model_args.assisted_topk_mask_layer_range,
+        topk_assistant_model: (.config.model_args.topk_assistant_model // "self")
       },
       scores: {
         arc_challenge: {
@@ -40,6 +41,10 @@ for file in $@; do
         mmlu: {
           score: .results.mmlu["acc,none"],
           stderr: .results.mmlu["acc_stderr,none"]
+        },
+        cmmlu: {
+          score: .results.cmmlu["acc_norm,none"],
+          stderr: .results.cmmlu["acc_norm_stderr,none"]
         },
         truthfulqa: {
           score: .results.truthfulqa_mc2["acc,none"],
