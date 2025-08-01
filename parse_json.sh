@@ -34,6 +34,12 @@ for file in $@; do
           score_flexible: .results.gsm8k["exact_match,flexible-extract"],
           stderr_flexible: .results.gsm8k["exact_match_stderr,flexible-extract"]
         },
+        gsm8k_cot: {
+          score: .results.gsm8k_cot["exact_match,strict-match"],
+          stderr: .results.gsm8k_cot["exact_match_stderr,strict-match"],
+          score_flexible: .results.gsm8k_cot["exact_match,flexible-extract"],
+          stderr_flexible: .results.gsm8k_cot["exact_match_stderr,flexible-extract"]
+        },
         hellaswag: {
           score: .results.hellaswag["acc_norm,none"],
           stderr: .results.hellaswag["acc_norm_stderr,none"]
