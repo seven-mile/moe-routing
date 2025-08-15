@@ -18,9 +18,7 @@ for file in $@; do
     jq '{
       model_config: {
         use_assisted_topk: (.config.model_args.use_assisted_topk // false),
-        assistant_ppl_to_k: .config.model_args.assistant_ppl_to_k,
-        shuffle_topk: .config.model_args.shuffle_topk,
-        assisted_topk_mask_layer_range: .config.model_args.assisted_topk_mask_layer_range,
+        assisted_action: .config.model_args.assisted_action,
         topk_assistant_model: (.config.model_args.topk_assistant_model // "self")
       },
       scores: {
@@ -64,6 +62,11 @@ for file in $@; do
           score: .results["ceval-valid"]["acc_norm,none"],
           stderr: .results["ceval-valid"]["acc_norm_stderr,none"]
         }
+      },
+      assisted_stat: {
+        ksum: .assisted_stat.ksum,
+        kcnt: .assisted_stat.kcnt,
+        benefit: .assisted_stat.benefit
       }
     }' "$file"
     
