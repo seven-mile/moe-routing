@@ -22,6 +22,14 @@ def calc_perplexity(logits, token_ids):
     return torch.exp(loss).view(token_ids.shape)
 
 
+def prepare_model_config(model, tokenizer):
+    model.generation_config.pad_token_id = tokenizer.eos_token_id
+    model.generation_config.do_sample = False
+    model.generation_config.temperature = None
+    model.generation_config.top_p = None
+    model.generation_config.top_k = None
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Evaluate causal LM on CEval with speculative sampling and record to DuckDB"
@@ -31,7 +39,9 @@ def parse_args():
     parser.add_argument("--experiment_name", default=None,
                         help="Logical name for this experiment group")
     parser.add_argument("--model_name", default="Qwen/Qwen3-30B-A3B",
-                        help="Pretrained model identifier")
+                        help="Pretrained main model identifier")
+    parser.add_argument("--spec_model_name", default="Qwen/Qwen3-0.6B",
+                        help="Pretrained spec model identifier")
     parser.add_argument("--split", default="val",
                         help="Dataset split to use")
     parser.add_argument("--num_samples", type=int, default=None,
@@ -86,13 +96,12 @@ def main():
     args = parse_args()
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_visible_devices
 
-    # 如果 experiment_name 未指定，则使用默认格式
+    # experiment naming
     if args.experiment_name is None:
         args.experiment_name = f"ours_ceval_{args.dataset_config}_{args.split}"
 
-    # 初始化数据库与记录实验/运行信息
+    # init DB
     conn = init_duckdb(args.duckdb_path)
-    # 获取或插入 experiment
     exp = conn.execute(
         "SELECT experiment_id FROM experiments WHERE name = ?", [args.experiment_name]
     ).fetchone()
@@ -102,29 +111,36 @@ def main():
         experiment_id = conn.execute(
             "INSERT INTO experiments(name) VALUES(?) RETURNING experiment_id", [args.experiment_name]
         ).fetchone()[0]
-    # 插入新的 run
     run_id = conn.execute(
         "INSERT INTO runs(experiment_id, status) VALUES(?, 'RUNNING') RETURNING run_id", [experiment_id]
     ).fetchone()[0]
 
     print(f"Experiment {args.experiment_name} (ID={experiment_id}), run ID={run_id}")
 
-    print(f"Loading model {args.model_name} on GPU(s) {args.cuda_visible_devices}...")
+    # load tokenizer and models
+    print(f"Loading main model {args.model_name} and spec model {args.spec_model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    # main model
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name,
         torch_dtype="auto",
         device_map="auto",
         attn_implementation="flash_attention_2",
     )
-    model.generation_config.pad_token_id = tokenizer.eos_token_id
-    model.generation_config.do_sample = False
-    model.generation_config.temperature = None
-    model.generation_config.top_p = None
-    model.generation_config.top_k = None
+    # spec model on separate device
+    spec_model = AutoModelForCausalLM.from_pretrained(
+        args.spec_model_name,
+        torch_dtype="auto",
+        device_map="auto",
+        attn_implementation="flash_attention_2",
+    )
+    prepare_model_config(model, tokenizer)
+    prepare_model_config(spec_model, tokenizer)
     device = next(model.parameters()).device
-    print("Model loaded.\n")
+    spec_device = next(spec_model.parameters()).device
+    print("Models loaded.\n")
 
+    # load dataset
     print(f"Loading dataset ceval/ceval-exam ({args.dataset_config}) split={args.split}...")
     ds = load_dataset("ceval/ceval-exam", args.dataset_config, split=args.split)
     if args.num_samples:
@@ -136,6 +152,7 @@ def main():
     correct = 0
 
     for idx, doc in enumerate(tqdm(ds, desc="Evaluating")):
+        # build prompt
         prompt_start = (
             f"{doc['question'].strip()}\n"
             f"A. {doc['A']}\n"
@@ -146,17 +163,18 @@ def main():
         )
         input_ids = tokenizer(prompt_start, return_tensors="pt").input_ids.to(device)
 
-        # init cache
+        # init caches for both models
         with torch.no_grad():
             out = model(input_ids[:, :-1], use_cache=True)
             past = out.past_key_values
+        with torch.no_grad():
+            spec_out = spec_model(input_ids[:, :-1].to(spec_device), use_cache=True)
+            spec_past = spec_out.past_key_values
 
         gen_ids = []
         spec_ppls = []      # store only accepted-token PPLs
         spec_accept = []
         total_topks = []
-
-        cur_ids = input_ids
         base_k = model.config.num_experts_per_tok
 
         avg_accepts = []
@@ -164,30 +182,29 @@ def main():
 
         # speculative loop
         with tqdm(total=args.max_think_tokens, desc="Thinking", leave=False) as pbar:
+            cur_ids = input_ids
             while len(gen_ids) < args.max_think_tokens:
                 cur_len = cur_ids.size(-1)
                 with torch.no_grad():
-                    gen_out = model.generate(
+                    gen_out = spec_model.generate(
                         cur_ids,
                         max_new_tokens=args.step_tokens,
                         output_logits=True,
                         return_dict_in_generate=True,
-                        past_key_values=past,
+                        past_key_values=spec_past,
                         use_cache=True
                     )
-                new_ids = gen_out.sequences[0, cur_ids.size(-1):]
+                new_ids = gen_out.sequences[0, cur_len:]
                 logits = torch.cat(gen_out.logits, dim=0)
                 ppls = calc_perplexity(logits, new_ids)
 
                 # determine allowed top_k per token
                 topks = torch.full_like(new_ids, base_k, dtype=torch.int32)
-                # topks = torch.where(ppls > 2.0, base_k, base_k - 1)
-                topks = torch.where(ppls < 2.0, base_k - 1, topks)
-                topks = torch.where(ppls < 1.02, base_k - 2, topks)
-                topks = torch.where(ppls < 1.004, base_k - 3, topks)
+                topks = torch.where(ppls < 6.0, base_k - 1, topks)
+                topks = torch.where(ppls < 1.17, base_k - 2, topks)
+                topks = torch.where(ppls < 1.07, base_k - 3, topks)
 
-                # verify
-                past.crop(cur_len-1)
+                # verify with model
                 verify_ids = torch.cat([cur_ids[:,-1:], new_ids[None, :-1]], dim=1)
                 with torch.no_grad():
                     verify_out = model(verify_ids, use_cache=True, past_key_values=past, token_top_ks=topks)
@@ -195,13 +212,14 @@ def main():
                 # count accepted tokens and their PPLs
                 accepted_ids = []
                 step_accepted_ppls = []
-                for i, (nid, logit) in enumerate(zip(new_ids, verify_out.logits[0])):
+                for i, (nid, logit) in enumerate(zip(new_ids, verify_out.logits[0].cpu())):
                     pick = int(logit.argmax(-1))
                     accepted_ids.append(pick)
                     step_accepted_ppls.append(ppls[i].item())
                     if pick != nid:
-                        # truncate kvcache to the last accepted token
+                        # truncate both caches to the last accepted token
                         past.crop(cur_len + i)
+                        spec_past.crop(cur_len + i)
                         break
                 accepted = len(step_accepted_ppls)
                 spec_accept.append(accepted)
@@ -209,9 +227,10 @@ def main():
                 # record only PPLs of accepted tokens
                 spec_ppls.extend(step_accepted_ppls)
                 # record token top_k
+                # TODO: Should record total ks rather than the accepted slice.
                 total_topks.extend(topks[:accepted].tolist())
 
-                # advance
+                # advance main generation state
                 gen_ids.extend(accepted_ids)
                 cur_ids = torch.cat([cur_ids, torch.tensor([accepted_ids], device=device)], dim=1)
                 pbar.update(len(accepted_ids))
@@ -223,10 +242,9 @@ def main():
 
         think_text = tokenizer.decode(gen_ids)
 
-        # final prompt
+        # final prompt & prediction
         full_text = prompt_start + think_text + "\n答案："
         full_ids = tokenizer(full_text, return_tensors="pt").input_ids.to(device)
-
         with torch.no_grad():
             out = model(full_ids)
             last_logits = out.logits[0,-1]
@@ -237,7 +255,7 @@ def main():
         if pred == truth:
             correct += 1
 
-        # 插入 eval 记录时带上 run_id
+        # insert eval record
         conn.execute(
             "INSERT INTO eval VALUES (?,?,?,?,?,?,?,?,?,?)",
             [idx, run_id,
@@ -255,7 +273,6 @@ def main():
 
     print(f"Done. acc={correct}/{len(ds)} total_accept_avg={sum(avg_accepts)/len(avg_accepts):.2f} total_topk_avg%={sum(avg_topks)/len(avg_topks):.2f}%")
 
-    # 更新 run 状态
     conn.execute(
         "UPDATE runs SET finished_at = now(), status = 'COMPLETED' WHERE run_id = ?", [run_id]
     )
