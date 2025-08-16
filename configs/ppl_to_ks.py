@@ -65,3 +65,44 @@ def spec_layerwise2(ppls, config):
         all_layer_ks.append(_calc_segment(cfg, ppls, config))
 
     return torch.stack(all_layer_ks)
+
+# based on default4, seek for even better benefit
+def spec_layerwise3(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(6, 18) or lid in range(num_layers-22, num_layers):
+            cfg = [x + 1.0 for x in base_spec_formula]
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+# ablation cases for early layers
+def spec_layerwise_early0(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(0, 12) or lid in range(num_layers-22, num_layers):
+            cfg = [x + 1.0 for x in base_spec_formula]
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+def spec_layerwise_early1(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(0, 12) or lid in range(num_layers-22, num_layers):
+            cfg = [x + 1.0 for x in base_spec_formula]
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
