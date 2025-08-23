@@ -81,7 +81,7 @@ def spec_layerwise3(ppls, config):
     return torch.stack(all_layer_ks)
 
 # ablation cases for early layers
-def spec_layerwise_early0(ppls, config):
+def spec_layerwise1_early0(ppls, config):
     num_layers = config.num_hidden_layers
     base_spec_formula = [6, 1.17, 1.07]
     all_layer_ks = []
@@ -94,13 +94,88 @@ def spec_layerwise_early0(ppls, config):
 
     return torch.stack(all_layer_ks)
 
-def spec_layerwise_early1(ppls, config):
+spec_layerwise_early0 = spec_layerwise1_early0
+
+def spec_layerwise1_early1(ppls, config):
     num_layers = config.num_hidden_layers
     base_spec_formula = [6, 1.17, 1.07]
     all_layer_ks = []
     for lid in range(num_layers):
-        if lid in range(0, 12) or lid in range(num_layers-22, num_layers):
+        if lid in range(1, 13) or lid in range(num_layers-22, num_layers):
             cfg = [x + 1.0 for x in base_spec_formula]
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+spec_layerwise_early1 = spec_layerwise1_early1
+
+def spec_layerwise1_early4(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(4, 16) or lid in range(num_layers-22, num_layers):
+            cfg = [x + 1.0 for x in base_spec_formula]
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+spec_layerwise_early4 = spec_layerwise1_early4
+
+def spec_default1_mask2025(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(20, 25):
+            # do not apply any dyn ks
+            cfg = []
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+def spec_default2_mask2025(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(20, 25):
+            # do not apply any dyn ks
+            cfg = []
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+def spec_default3_mask2025(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(20, 25):
+            # do not apply any dyn ks
+            cfg = []
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+def spec_default4_mask2025(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [6, 1.17, 1.07, 1.07]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(20, 25):
+            # do not apply any dyn ks
+            cfg = []
         else:
             cfg = base_spec_formula
         all_layer_ks.append(_calc_segment(cfg, ppls, config))
