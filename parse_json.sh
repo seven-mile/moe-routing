@@ -27,8 +27,8 @@ for file in $@; do
           stderr: .results.arc_challenge["acc_norm_stderr,none"]
         },
         gsm8k: {
-          score: .results.gsm8k["exact_match,strict-match"],
-          stderr: .results.gsm8k["exact_match_stderr,strict-match"],
+          score_strict: .results.gsm8k["exact_match,strict-match"],
+          stderr_strict: .results.gsm8k["exact_match_stderr,strict-match"],
           score_flexible: .results.gsm8k["exact_match,flexible-extract"],
           stderr_flexible: .results.gsm8k["exact_match_stderr,flexible-extract"]
         },
@@ -68,7 +68,8 @@ for file in $@; do
         kcnt: .assisted_stat.kcnt,
         benefit: .assisted_stat.benefit
       }
-    }' "$file"
+    }' "$file" \
+    | jq '.scores |= map_values(with_entries(select(.value != null))) | .scores |= del(.. | select(. == {}))'
     
     # Add a newline for better readability between file outputs
     echo ""
