@@ -33,8 +33,8 @@ for file in $@; do
           stderr_flexible: .results.gsm8k["exact_match_stderr,flexible-extract"]
         },
         gsm8k_cot: {
-          score: .results.gsm8k_cot["exact_match,strict-match"],
-          stderr: .results.gsm8k_cot["exact_match_stderr,strict-match"],
+          score_strict: .results.gsm8k_cot["exact_match,strict-match"],
+          stderr_strict: .results.gsm8k_cot["exact_match_stderr,strict-match"],
           score_flexible: .results.gsm8k_cot["exact_match,flexible-extract"],
           stderr_flexible: .results.gsm8k_cot["exact_match_stderr,flexible-extract"]
         },
@@ -61,6 +61,16 @@ for file in $@; do
         ceval: {
           score: .results["ceval-valid"]["acc_norm,none"],
           stderr: .results["ceval-valid"]["acc_norm_stderr,none"]
+        },
+        humaneval: {
+          score: .results.humaneval["pass@1,create_test"],
+          stderr: .results.humaneval["pass@1_stderr,create_test"]
+        },
+        gpqa_diamond_cot_n_shot: {
+          score_strict: .results.gpqa_diamond_cot_n_shot["exact_match,strict-match"],
+          stderr_strict: .results.gpqa_diamond_cot_n_shot["exact_match_stderr,strict-match"],
+          score_flexible: .results.gpqa_diamond_cot_n_shot["exact_match,flexible-extract"],
+          stderr_flexible: .results.gpqa_diamond_cot_n_shot["exact_match_stderr,flexible-extract"]
         }
       },
       assisted_stat: {
