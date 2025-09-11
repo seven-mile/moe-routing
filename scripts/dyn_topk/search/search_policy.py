@@ -186,14 +186,18 @@ def run_evaluation(args: argparse.Namespace):
             spec_outputs = spec_model(input_ids=input_ids, attention_mask=inputs.attention_mask)
             spec_losses = calculate_token_losses(spec_outputs.logits, input_ids)
 
-            layer_ks_per_token = get_assisted_topks(formula, spec_losses, base_top_k)
+            # Only apply reduced k values to think_part tokens, others use base_top_k
+            layer_ks_per_token = torch.full_like(spec_losses, base_top_k, dtype=torch.int64)
+            think_part_ks = get_assisted_topks(formula, spec_losses[think_mask], base_top_k)
+            
+            benefit = (think_part_ks.sum() / (think_part_ks.numel() * base_top_k)).item()
+            layer_ks_per_token[think_mask] = think_part_ks
+            
             dummy_k = torch.full((layer_ks_per_token.shape[0], 1), base_top_k, dtype=torch.int64, device=device)
             layer_ks = torch.cat([layer_ks_per_token, dummy_k], dim=1)
             
             # Assume all layers use the same k-selection strategy.
             token_top_ks = torch.stack([layer_ks] * num_layers, dim=0)
-
-            benefit = (token_top_ks.sum() / (token_top_ks.numel() * base_top_k)).item()
             
             reduced_outputs = model(
                 input_ids=input_ids,
