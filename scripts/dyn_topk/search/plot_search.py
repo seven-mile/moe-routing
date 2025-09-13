@@ -64,4 +64,6 @@ def plot_scatter_from_json(file_path):
 # ]
 
 # Uncomment the line below and change 'data.json' to your file name
-plot_scatter_from_json('search.json')
+import sys
+assert len(sys.argv) == 2, "Usage: python plot_search.py <data.json>"
+plot_scatter_from_json(sys.argv[1])
