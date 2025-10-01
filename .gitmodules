@@ -1,0 +1,9 @@
+[submodule "vllm"]
+	path = vllm
+	url = git@github.com:seven-mile/moe-routing-vllm.git
+[submodule "lm-evaluation-harness"]
+	path = lm-evaluation-harness
+	url = git@github.com:seven-mile/moe-routing-lmeval.git
+[submodule "transformers"]
+	path = transformers
+	url = git@github.com:seven-mile/moe-routing-transformers.git
