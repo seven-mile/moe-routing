@@ -7,26 +7,39 @@ requires-python = ">=3.12"
 dependencies = [
     "autoawq>=0.2.9",
     "datasets>=3.6.0",
+    "deep-ep",
     "duckdb>=1.3.1",
     "flash-attn>=2.7.4.post1",
     "jinja2>=3.1.6",
+    "lm-eval",
     "matplotlib>=3.10.3",
     "pyarrow>=20.0.0",
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
     "sentencepiece>=0.2.0",
     "tqdm>=4.67.1",
-    "transformers>=4.51.3",
+    "transformers",
+    "vllm",
+    # "sglang[all]",
 ]
 
 [dependency-groups]
 dev = [
+    "cmake>=4.1.0",
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.7",
     "libcst>=1.8.2",
     "ruff>=0.12.2",
+    "setuptools-scm>=9.2.0",
 ]
 
 [tool.uv]
 index-url = "https://mirrors.sustech.edu.cn/pypi/web/simple"
 no-build-isolation-package = ['flash-attn']
+
+[tool.uv.sources]
+lm-eval = { path = "lm-evaluation-harness", editable = true }
+transformers = { path = "transformers", editable = true }
+deep-ep = { path = "deep-ep", editable = true }
+vllm = { path = "vllm", editable = true }
+# sglang = { path = "sglang/python", editable = true }
