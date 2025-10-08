@@ -35,6 +35,7 @@ logging.basicConfig(
 
 def calculate_token_losses(logits: torch.Tensor, ids: torch.Tensor) -> torch.Tensor:
     """Calculates the cross-entropy loss for each token (log-perplexity)."""
+    logits = logits.float()
     assert logits.shape[:-1] == ids.shape
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = ids[..., 1:].contiguous()
@@ -189,7 +190,7 @@ def run_evaluation(args: argparse.Namespace):
             # Only apply reduced k values to think_part tokens, others use base_top_k
             layer_ks_per_token = torch.full_like(spec_losses, base_top_k, dtype=torch.int64)
             think_part_ks = get_assisted_topks(formula, spec_losses[think_mask], base_top_k)
-            
+
             benefit = (think_part_ks.sum() / (think_part_ks.numel() * base_top_k)).item()
             layer_ks_per_token[think_mask] = think_part_ks
             
@@ -211,16 +212,36 @@ def run_evaluation(args: argparse.Namespace):
     
     # 1. Generate formulas to test
     base_formula = (6, 1.17, 1.07, 1.07)
+    # search_space = {
+    #     # Dimension 0 (Base: 6.0): Explores integer values around the base.
+    #     0: [4.0, 5.0, 6.0, 7.0, 8.0],
+    #     # Dimension 1 (Base: 1.17): Denser search with a 0.01 step.
+    #     1: frange(1.12, 1.22, 0.01),
+    #     # Dimension 2 (Base: 1.07): Denser search with a 0.01 step.
+    #     2: frange(1.04, 1.14, 0.01),
+    #     # Dimension 3 (Base: 1.07): Varies the final threshold.
+    #     3: frange(1.02, 1.10, 0.02),
+    # }
     search_space = {
-        # Dimension 0 (Base: 6.0): Explores integer values around the base.
-        0: [4.0, 5.0, 6.0, 7.0, 8.0],
-        # Dimension 1 (Base: 1.17): Denser search with a 0.01 step.
+        # 第一维：在 7.0~9.0 之间以 0.25 步长细化，探索 8.0 附近的结构
+        0: np.round(np.arange(7.0, 9.01, 0.25), 2).tolist(),
+        # 第二维：保持原有密度
         1: frange(1.12, 1.22, 0.01),
-        # Dimension 2 (Base: 1.07): Denser search with a 0.01 step.
+        # 第三维：保持原有密度
         2: frange(1.04, 1.14, 0.01),
-        # Dimension 3 (Base: 1.07): Varies the final threshold.
-        3: frange(1.02, 1.10, 0.02),
+        # 第四维：更细致地探索 1.02~1.08，步长 0.005
+        3: frange(1.02, 1.08, 0.005),
     }
+    # search_space = {
+    #     # 第一维：只用 8.0 和 8.5，专注高 benefit 区间
+    #     0: [8.0, 8.5],
+    #     # 第二维：更细致探索 1.15~1.22，步长 0.005
+    #     1: frange(1.15, 1.22, 0.005),
+    #     # 第三维：更细致探索 1.08~1.14，步长 0.005
+    #     2: frange(1.08, 1.14, 0.005),
+    #     # 第四维：只用 1.02, 1.04, 1.06, 1.08，减少组合数
+    #     3: [1.02, 1.04, 1.06, 1.08],
+    # }
     formulas_to_test = generate_formulas(base_formula, search_space)
     # You can add this print statement after the definition to verify the size.
     print(
