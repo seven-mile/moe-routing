@@ -7,3 +7,6 @@
 [submodule "transformers"]
 	path = transformers
 	url = git@github.com:seven-mile/moe-routing-transformers.git
+[submodule "deep-ep"]
+	path = deep-ep
+	url = https://github.com/deepseek-ai/DeepEP
