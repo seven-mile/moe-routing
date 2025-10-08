@@ -18,9 +18,10 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 from datasets import Dataset
+from itertools import accumulate
 from torch.nn.functional import cross_entropy
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Sequence
 
 # --- Skopt Imports ---
 from skopt import gp_minimize
@@ -187,10 +188,19 @@ def run_optimization(args: argparse.Namespace):
     # 1. Define the continuous search space
     dimensions = [
         Real(1.0, 10.0, name='p0'),
-        Real(1.0, 10.0, name='p1'),
-        Real(1.0, 10.0, name='p2'),
-        Real(1.0, 10.0, name='p3'),
+        Real(0.0, 1.0, name='p1'),
+        Real(0.0, 1.0, name='p2'),
+        Real(0.0, 1.0, name='p3'),
     ]
+
+    def convert_point_to_formula(point: Sequence[float]) -> Tuple[float, ...]:
+        """Converts a skopt point to a monotonically non-increasing tuple."""
+        return tuple(accumulate(point, lambda x, y: x * y))
+    
+    def convert_formula_to_point(formula: Sequence[float]) -> Tuple[float, ...]:
+        """Converts a formula back to the skopt point representation."""
+        p1, p2, p3, p4 = formula
+        return p1, p2 / p1, p3 / p2, p4 / p3
 
     # Load previous results to avoid re-evaluation and inform the optimizer
     results = []
@@ -209,10 +219,9 @@ def run_optimization(args: argparse.Namespace):
         The objective function that skopt will minimize.
         It takes a formula, evaluates its PPL, and returns it.
         """
-        formula = tuple(params.values())
+        point = tuple(params.values())
+        formula = convert_point_to_formula(point)
         
-        # CONSTRAINT: Ensure the formula is monotonically non-increasing.
-        # If not, return a large penalty value.
         if not all(formula[i] >= formula[i+1] for i in range(len(formula) - 1)):
             logging.warning(f"Skipping invalid (non-monotonic) formula: {formula}")
             return 1e10 
@@ -220,7 +229,6 @@ def run_optimization(args: argparse.Namespace):
         formula_str = str(formula)
         if any(res['formula'] == formula_str for res in results):
             logging.info(f"Formula {formula} already evaluated. Skipping.")
-            # Find and return the stored PPL
             for res in results:
                 if res['formula'] == formula_str:
                     return res['avg_ppl']
@@ -228,7 +236,6 @@ def run_optimization(args: argparse.Namespace):
         logging.info(f"Now evaluating formula: {formula}")
 
         formula_losses, benefits = [], []
-        # Use a simplified description for the progress bar
         pbar_desc = f"Eval {formula[0]:.2f}, {formula[1]:.2f}, ..."
         for i in tqdm(range(0, len(dataset), args.batch_size), desc=pbar_desc, leave=False):
             batch = [dataset[j] for j in range(i, min(i + args.batch_size, len(dataset)))]
@@ -251,7 +258,6 @@ def run_optimization(args: argparse.Namespace):
         
         logging.info(f"--> Result | Formula: {formula}, Avg PPL: {avg_ppl:.4f}, Benefit: {avg_benefit:.6f}")
         
-        # Save results incrementally
         with open(output_path, 'w') as f:
             json.dump(results, f, indent=4)
         
@@ -292,7 +298,19 @@ def run_optimization(args: argparse.Namespace):
     
     # 3. Run Bayesian Optimization
     logging.info("Starting Bayesian Optimization...")
-    # skopt will handle loading from the checkpoint if it exists
+    
+    # Prepare warm-start data from existing results
+    x0, y0 = [], []
+    for res in results:
+        if res['formula'] != 'baseline':
+            try:
+                formula = eval(res['formula'])
+                point = convert_formula_to_point(formula)
+                x0.append(point)
+                y0.append(res['avg_ppl'])
+            except:
+                continue
+    
     opt_result = gp_minimize(
         func=objective,
         dimensions=dimensions,
@@ -300,14 +318,14 @@ def run_optimization(args: argparse.Namespace):
         n_initial_points=args.n_initial_points,
         random_state=123,
         callback=[checkpoint_saver],
-        # If you have previous results, you can "warm-start" the optimizer
-        # x0=[res['formula'] for res in results if res['formula'] != 'baseline'],
-        # y0=[res['avg_ppl'] for res in results if res['formula'] != 'baseline']
+        x0=x0 if x0 else None,
+        y0=y0 if y0 else None
     )
 
     logging.info("Optimization complete.")
     logging.info(f"Best PPL found: {opt_result.fun:.4f}")
-    logging.info(f"Best parameters: {opt_result.x}")
+    best_formula = convert_point_to_formula(opt_result.x)
+    logging.info(f"Best formula: {best_formula}")
 
 
 if __name__ == "__main__":
