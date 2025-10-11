@@ -181,3 +181,31 @@ def spec_default4_mask2025(ppls, config):
         all_layer_ks.append(_calc_segment(cfg, ppls, config))
 
     return torch.stack(all_layer_ks)
+
+def spec_opt1_mask2025(ppls, config):
+    num_layers = config.num_hidden_layers
+    base_spec_formula = [10.0, 6.58, 1.275, 1.0]
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(20, 25):
+            # do not apply any dyn ks
+            cfg = []
+        else:
+            cfg = base_spec_formula
+        all_layer_ks.append(_calc_segment(cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
+
+spec_with_list_full_layers = _calc_segment
+
+def spec_with_list_layer_range(cfg: list[float], layer_range: tuple[int, ...], ppls, config):
+    num_layers = config.num_hidden_layers
+    all_layer_ks = []
+    for lid in range(num_layers):
+        if lid in range(*layer_range):
+            layer_cfg = cfg
+        else:
+            layer_cfg = []
+        all_layer_ks.append(_calc_segment(layer_cfg, ppls, config))
+
+    return torch.stack(all_layer_ks)
