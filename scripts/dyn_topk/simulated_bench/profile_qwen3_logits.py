@@ -72,4 +72,4 @@ for entry in tqdm(dataset.select(range(TOTAL_ENTRIES))):
   ppls.append(entry_data)
   print('PPL calc:', len(ppls), 'entries processed', flush=True)
 
-torch.save(ppls, "data/logits/qwen3_ppls_32.pt")
+torch.save(ppls, "data/dyn_topk/simulated_bench/qwen3_ppls_32.pt")

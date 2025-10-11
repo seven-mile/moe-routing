@@ -17,7 +17,7 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B", device_map=main_
 
 dataset = load_dataset("lmsys/lmsys-chat-1m", split="train")
 
-full_ppls = torch.load("data/logits/qwen3_ppls_32.pt")
+full_ppls = torch.load("data/dyn_topk/simulated_bench/qwen3_ppls_32.pt")
 
 TOTAL_ENTRIES = 1
 

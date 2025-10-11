@@ -15,7 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "6,7"
 # Define the model to be used (should match the generation script)
 MODEL_NAME = "Qwen/Qwen3-30B-A3B"
 # Path to the input JSON file created by the first script
-INPUT_JSON_PATH = "data/assisted_dynamic_topk/ceval/ceval_results.json"
+INPUT_JSON_PATH = "data/dyn_topk/ceval/ceval_results.json"
 # Define the quantiles (percentiles) to calculate.
 # Default: 11 deciles (0%, 10%, ..., 100%)
 QUANTILES_TO_CALCULATE = list(range(0, 101, 10))
@@ -158,7 +158,7 @@ print("\n--- 输出结果示例 (前5行) ---")
 print(df.head())
 
 # You can now easily save this DataFrame to a CSV or other formats
-output_csv_path = "data/assisted_dynamic_topk/ceval/ceval_logprob_quantiles.csv"
+output_csv_path = "data/dyn_topk/ceval/ceval_logprob_quantiles.csv"
 print(f"\n将 DataFrame 保存到 '{output_csv_path}'...")
 df.to_csv(output_csv_path, index=False)
 print("成功保存。")
