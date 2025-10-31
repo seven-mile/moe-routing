@@ -4,42 +4,48 @@ import json
 from datasets import load_dataset, get_dataset_config_names
 from jinja2 import Template
 from vllm import LLM, SamplingParams
+from vllm.utils.udf import UserDefinedFunctionConfig
 from tqdm import tqdm
 
 # 设置环境变量，指定使用的 GPU
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3,4"
 
 # 1. 准备 Jinja2 模板
 # 这个模板用于生成第一阶段的 prompt
 doc_to_text_template = Template("{{question.strip()}}\nA. {{A}}\nB. {{B}}\nC. {{C}}\nD. {{D}}\n<think>")
 
 # 2. 加载 CEVAL 数据集的所有子集 (subjects)
-try:
-    subset_names = get_dataset_config_names('ceval/ceval-exam')
-    print(f"成功发现 {len(subset_names)} 个 CEVAL 子集。")
-except Exception as e:
-    print(f"无法自动获取子集列表，将使用一个预定义的列表。错误: {e}")
-    # 如果无法自动获取，可以使用一个已知的子集列表
-    subset_names = [
-        'accountant', 'advanced_mathematics', 'art_studies', 'basic_medicine',
-        'business_administration', 'chinese_language_and_literature', 'civil_servant',
-        'clinical_medicine', 'college_chemistry', 'college_economics', 'college_physics',
-        'computer_architecture', 'computer_network', 'education', 'electrical_engineer',
-        'environmental_science', 'fire_engineer', 'high_school_biology',
-        'high_school_chemistry', 'high_school_chinese', 'high_school_geography',
-        'high_school_history', 'high_school_mathematics', 'high_school_physics',
-        'high_school_politics', 'ideological_and_moral_cultivation',
-        'introduction_to_mao_zedong_thought', 'law', 'legal_professional',
-        'logic', 'marxism', 'metrology_engineer', 'middle_school_biology',
-        'middle_school_chemistry', 'middle_school_geography',
-        'middle_school_history', 'middle_school_mathematics',
-        'middle_school_physics', 'middle_school_politics', 'modern_chinese_history',
-        'official_document_writing', 'operating_system', 'pharmacy', 'physics',
-        'plant_protection', 'probability_and_statistics', 'professional_comprehensive',
-        'psychology', 'public_security', 'sports_science', 'tax_accountant',
-        'teacher_qualification', 'urban_and_rural_planner', 'veterinary_medicine',
-        'world_history'
-    ]
+# try:
+#     subset_names = get_dataset_config_names('ceval/ceval-exam')
+#     print(f"成功发现 {len(subset_names)} 个 CEVAL 子集。")
+# except Exception as e:
+#     print(f"无法自动获取子集列表，将使用一个预定义的列表。错误: {e}")
+#     # 如果无法自动获取，可以使用一个已知的子集列表
+#     subset_names = [
+#         'accountant', 'advanced_mathematics', 'art_studies', 'basic_medicine',
+#         'business_administration', 'chinese_language_and_literature', 'civil_servant',
+#         'clinical_medicine', 'college_chemistry', 'college_economics', 'college_physics',
+#         'computer_architecture', 'computer_network', 'education', 'electrical_engineer',
+#         'environmental_science', 'fire_engineer', 'high_school_biology',
+#         'high_school_chemistry', 'high_school_chinese', 'high_school_geography',
+#         'high_school_history', 'high_school_mathematics', 'high_school_physics',
+#         'high_school_politics', 'ideological_and_moral_cultivation',
+#         'introduction_to_mao_zedong_thought', 'law', 'legal_professional',
+#         'logic', 'marxism', 'metrology_engineer', 'middle_school_biology',
+#         'middle_school_chemistry', 'middle_school_geography',
+#         'middle_school_history', 'middle_school_mathematics',
+#         'middle_school_physics', 'middle_school_politics', 'modern_chinese_history',
+#         'official_document_writing', 'operating_system', 'pharmacy', 'physics',
+#         'plant_protection', 'probability_and_statistics', 'professional_comprehensive',
+#         'psychology', 'public_security', 'sports_science', 'tax_accountant',
+#         'teacher_qualification', 'urban_and_rural_planner', 'veterinary_medicine',
+#         'world_history'
+#     ]
+
+subset_names = [
+    'high_school_mathematics',
+    'computer_architecture',
+]
 
 # 3. 准备所有待处理的样本
 # 我们将存储每个样本的完整信息
@@ -57,14 +63,20 @@ for subset in tqdm(subset_names, desc="加载子集"):
 
 print(f"数据集加载完成，共计 {len(all_requests)} 条样本。")
 
+all_requests = all_requests[:256]
+print(f"仅使用前 {len(all_requests)} 条样本进行处理。")
+
 # 4. 初始化 VLLM 模型
 # 请将 "your_model_name_or_path" 替换为您要使用的模型名称或本地路径
 # tensor_parallel_size 可以根据你的 GPU 数量进行调整以加速
 print("正在初始化 VLLM 模型...")
 llm = LLM(
     model="Qwen/Qwen3-30B-A3B", # 替换为您的模型路径
-    # tensor_parallel_size=torch.cuda.device_count(), # 根据可用 GPU 数量设置
-    trust_remote_code=True # 对于某些模型是必需的
+    tensor_parallel_size=torch.cuda.device_count(), # 根据可用 GPU 数量设置
+    speculative_config={"model":"Tengyunw/qwen3_30b_moe_eagle3","num_speculative_tokens":4},
+    gpu_memory_utilization=0.8,
+    enforce_eager=True,
+    trust_remote_code=True, # 对于某些模型是必需的
 )
 print("模型初始化完成。")
 
@@ -75,13 +87,17 @@ print("\n--- 开始第一阶段：生成思考过程 ---")
 prompts_stage1 = [doc_to_text_template.render(req) for req in all_requests]
 
 # 设置第一阶段的采样参数，在 </think> 处停止
-sampling_params_think = SamplingParams(
+sampling_params_think = SamplingParams.from_optional(
     max_tokens=2048,  # 思考过程的最大长度
     temperature=0.6,
     top_p=0.95,
     top_k=20,
     min_p=0.0,
-    stop=["</think>", "<|end_of_turn|>"] # 关键停止符
+    stop=["</think>", "<|end_of_turn|>"], # 关键停止符
+    dyn_assisted_action_config=UserDefinedFunctionConfig(
+        file="configs/ppl_to_ks.py",
+        function="spec_default3_mask2025"
+    )
 )
 
 # 使用 VLLM 批量生成思考过程
@@ -105,13 +121,17 @@ for i, req in enumerate(all_requests):
     prompts_stage2.append(f"{prompt_part1}{think_part}</think>")
 
 # 设置第二阶段的采样参数，生成最终答案直到结束
-sampling_params_answer = SamplingParams(
+sampling_params_answer = SamplingParams.from_optional(
     max_tokens=2048,  # 答案部分的最大长度
     temperature=0.6,
     top_p=0.95,
     top_k=20,
     min_p=0.0,
-    stop=["<|end_of_turn|>"] # 使用模型的自然结束符
+    stop=["<|end_of_turn|>"], # 使用模型的自然结束符
+    dyn_assisted_action_config=UserDefinedFunctionConfig(
+        file="configs/ppl_to_ks.py",
+        function="spec_default3_mask2025"
+    )
 )
 
 # 使用 VLLM 批量生成最终答案
@@ -139,7 +159,7 @@ for i, request_data in enumerate(tqdm(all_requests, desc="处理结果")):
     })
 
 # 8. 将结果保存到 JSON 文件
-output_file_path = "data/datasets/ceval_results_with_answer.json"
+output_file_path = "data/datasets/dyn_topk/ceval_results_with_answer.json"
 print(f"正在将结果写入到 {output_file_path}...")
 with open(output_file_path, "w", encoding="utf-8") as f:
     json.dump(results_to_save, f, ensure_ascii=False, indent=4)
