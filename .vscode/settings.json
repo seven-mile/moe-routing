@@ -4,5 +4,6 @@
     "${workspaceFolder}/deep-ep",
     "${workspaceFolder}/vllm",
     "${workspaceFolder}/transformers",
+    "${workspaceFolder}/lm-evaluation-harness",
   ]
 }
