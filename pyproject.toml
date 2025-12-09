@@ -14,8 +14,11 @@ dependencies = [
     "flashinfer-python>=0.3.1.post1",
     "frozendict>=2.4.6",
     "jinja2>=3.1.6",
-    "lm-eval[api]",
+    "lm-eval[api,longbench,ifeval]",
     "matplotlib>=3.10.3",
+    "nvidia-nvshmem-cu12>=3.4.5",
+    "nvshmem4py-cu12>=0.2.0",
+    "pplx-kernels",
     "pyarrow>=20.0.0",
     "scikit-learn>=1.6.1",
     "scikit-optimize>=0.10.2",
@@ -32,6 +35,7 @@ dev = [
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.7",
     "libcst>=1.8.2",
+    "modelscope>=1.32.0",
     "py-spy>=0.4.1",
     "ruff>=0.12.2",
     "setuptools-scm>=9.2.0",
@@ -39,10 +43,11 @@ dev = [
 
 [tool.uv]
 index-url = "https://mirrors.sustech.edu.cn/pypi/web/simple"
-no-build-isolation-package = ['flash-attn']
+no-build-isolation-package = ['flash-attn', 'pplx-kernels']
 
 [tool.uv.sources]
 lm-eval = { path = "lm-evaluation-harness", editable = true }
 transformers = { path = "transformers", editable = true }
 deep-ep = { path = "deep-ep", editable = true }
+pplx-kernels = { path = "pplx-kernels", editable = true }
 vllm = { path = "vllm", editable = true }

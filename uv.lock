@@ -225,6 +225,30 @@ wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/39/54/db7a801933dd2537f5376fb8a9e28caff488ef5c2d61f3a8fced55fe6336/blake3-1.0.7-cp313-cp313t-musllinux_1_1_x86_64.whl", hash = "sha256:d9046bb1e22a8607e1d0d7c3ff47e56e0a197c988502df4bf4d78563f3e9fe2c" },
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/2c/08/949cf68d16d1f731d502968bb1486e1a4bf7ef032c38fbc2ef26a2353494/blake3-1.0.7-cp313-cp313t-win32.whl", hash = "sha256:bd2f638bcc00fc09ce985ea3c642d45940e1eda198ab1f4b90cfdecbebbc9315" },
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/f2/ae/6783a5ca6235024e00a1e92ab6ca2cd855f4c61c763cf8d6d643846d110c/blake3-1.0.7-cp313-cp313t-win_amd64.whl", hash = "sha256:cb3aa1db14231c2ef0ec5acd805505ce128c39ffa510deb3384eed96fe4addcb" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/32/aa/99b4b6c22972b9a854f77d97846a717448a77d079e4bd38e46a3f8ecea76/blake3-1.0.7-cp314-cp314-macosx_10_12_x86_64.whl", hash = "sha256:f7db997205aa420d59fb5639346e40beafb9c09252e2ec6efedca8f230f7520c" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/f9/44/e98bc5450be415a335a191b154e299e335046d11fe9514d93961902b7aed/blake3-1.0.7-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:19afec6e276f3bc154541248d92b1ecb198af2ee920025f7ce521028f9a69d8b" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/74/25/23a39913c8424ac3df705ed71a00efe34cc1cdbd4588ed6eaf458ea9d7ef/blake3-1.0.7-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:006a11bbba65a95e88ddc069cca751c8812fd144d582715eeea512452fdbe80d" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/db/83/9f53a86de9a5999b043febfd84765d240014da42055aeac06d1005b20b07/blake3-1.0.7-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:7febeffdc8412fed105ca517cee641ac521fb9cfb750bf7e27a5cdf3ddf74a08" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/c4/4c/3290aa4fb7483975a7b3322a73692aa3cf491a77ce7ac61c216c71c6f834/blake3-1.0.7-cp314-cp314-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:6c032ce7c52b71015651c0abe9fe599aa2669e6be578aa17d5f993dc93373401" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/66/26/92b6e15552865416aae1aedad8b9b4d8b47ca9b73d25373622b1798c05a9/blake3-1.0.7-cp314-cp314-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:5b81455f7d24b58fe26be037cc3854c28ea6eb3671ceab3b1ec0b1239aeb6fef" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/1b/ef/f158fc43a03fd366bc428a52a845bd0f884e518deda901c9216bd469867e/blake3-1.0.7-cp314-cp314-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:41b0127b0e7c8610054c421959dbe7140a81ac2c88fa9e099994fbaa529af3c1" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/10/49/2a56ce897ec7ed0e25953b3873da271ea60cc107ae02ecc6655252e554c7/blake3-1.0.7-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4755ca95b4114b629d8f3570bc661916d211d52d47f57ff70e9687377ab39cb9" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/d9/c4/ee4c03ea419198b91c889ef173015b5d637a390d3f7d63cb70033a7201d6/blake3-1.0.7-cp314-cp314-musllinux_1_1_aarch64.whl", hash = "sha256:8abe929cfd27b375e02e3dd7a690192fa4efecc52ef510df91ef01651ef08dc7" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b2/cc/a918d6649b56fe705133e06d9958d90978aad30063d42cca4dfe23db16e9/blake3-1.0.7-cp314-cp314-musllinux_1_1_x86_64.whl", hash = "sha256:dd607eb5ad5a9b44ff62243759aa0af4085f6f43c9b01f503561a70da63e3b94" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/fd/9f/568546f555fd1555d4867c497e9413f67bf769d076e773b9ca9e07a0b6f6/blake3-1.0.7-cp314-cp314-win32.whl", hash = "sha256:a51684d1f346e7680f7c244c25b0e279e3b297f1938126e4ea8e32425ea269f5" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/97/2b/d4ef7365d9f601c8a127b5993f2662d45d2cb6d430bf3dbbb7a6f0b33639/blake3-1.0.7-cp314-cp314-win_amd64.whl", hash = "sha256:a6a481719e28e2c61aafd4273d32663365d97613341b72fcdf2f6afbd426319b" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/2f/53/f697cc34e382a225d163ea0c6a35c7eb4cfd1011e85db6610adfac98e522/blake3-1.0.7-cp314-cp314t-macosx_10_12_x86_64.whl", hash = "sha256:daa8933cd7db19143bd6b59f7ac4c7c7446767d7b2c3a748a4559aa483275fa2" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/4c/85/836dcb5c5709c2331f02ce065f7ebfaae710a6c1768cdc47ee3197645f98/blake3-1.0.7-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:24074adfffffe0fa7a7dd930cc608d6e965e70306e2c1e14d412e29ec94fa360" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/6d/48/36b2c25007933619ce60e24b9f360baaa77d08939284045476c8e157fe62/blake3-1.0.7-cp314-cp314t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:dce6e6f03de2674f9860cf330d8a4fcdb63a60659435e5e31d72d174fc102d8e" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/70/82/8a8977e5d56b9fb719033940c8ce34afc733190d34ab868a647a9af7b584/blake3-1.0.7-cp314-cp314t-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:e783f33d53a2de8d2ab845235dd53393d521b5e4a76c23d03e77e472266359d3" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/e2/c4/44017ba40804a528568b35a36c05187786830c4d891c5540d59a121a7cec/blake3-1.0.7-cp314-cp314t-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:782784aef18eb61f4ce8bf2b9506b7d90f0d183176b453345b221837a18041b7" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/78/c1/4fa20e68624784082734d31b8c9c80ad226658c024e61b9f9b6751ba0a4a/blake3-1.0.7-cp314-cp314t-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:6062122e77f40e3733cac2ef3f25e0fc7f555e352fe6f513f8404ad11dc69974" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/8e/63/af65466e27e7b92800a068afaee11b2fa071e34a7f5900f8e13832f18185/blake3-1.0.7-cp314-cp314t-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:6c2614bc9d69fd6067571f3bb37b3b07a6b86a56167553ad4784a3c508771f39" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/f3/82/54a4807a3243d0e094ada9d65687aeb40059587e374b3beb9c89f6552c9b/blake3-1.0.7-cp314-cp314t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d6df2bd56c43bdeb6699d4af0a0dd0d77537d95cb4a5dde4b39ed6e54cc725d6" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/42/e8/32b56531b5d9da67e476735ceaec7c3bf89310629abeeafb03c724145c88/blake3-1.0.7-cp314-cp314t-musllinux_1_1_aarch64.whl", hash = "sha256:8b635cf4350caf459ecb335b32be622068423245bda457d5bc159106eb20f912" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/ad/50/33b1aca708be629e285a537f1adf34dfcabc4c30b28c436361323d11f593/blake3-1.0.7-cp314-cp314t-musllinux_1_1_x86_64.whl", hash = "sha256:f96a685775f87ddf75ff495dc9698703268c66c170caca977347427ef8d52324" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/fe/07/8b17cbf40ccd9afeed6ae9f55018181786b30ff4e079ac8bf4ca4799e47b/blake3-1.0.7-cp314-cp314t-win32.whl", hash = "sha256:0633b7d9bad87dc7fce545042353f2e056604d993f71d1dce666a9f5edc13e05" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/d9/8a/ab9de8a73616350759356a483f440212bc2a22fc9aaa77cabbf06c3483db/blake3-1.0.7-cp314-cp314t-win_amd64.whl", hash = "sha256:5e356daa0089968dc1ff1d0d112e7cc1700533441d8f30ae99f835a94dc8b0f3" },
 ]
 
 [[package]]
@@ -497,11 +521,47 @@ wheels = [
 ]
 
 [[package]]
+name = "cuda-core"
+version = "0.4.0"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/6d/65/094897926f9569924e43bd810d09135ba8316655e7b7815febbc8c80d705/cuda_core-0.4.0-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:37a1e41a7558324af19b3f197211be0a1b7f612089fa5936c9bae8768cea4849" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b5/9b/ca8e549ff13cc333994b173aa6cd6d6cd20edcb07f0a545365488ce4cdd3/cuda_core-0.4.0-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:02b4f0c37f6640a2a021833d7ab94e8b88aba11f1b3d50e7fc317b49bdf7586c" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/6b/f8/e04ea90b51f4d5430ce3f000c358669a2bdf4846f7fc8aba5d2c6d0fa145/cuda_core-0.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:9eab759b3494e9a96ad6e76a54149f5ec80ffd4714cbdacfee791c2c8e8fa2fe" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/56/7b/c8442e837894c64c133c4b581d2a35e9585142e380fcb3e0db764266d1f3/cuda_core-0.4.0-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c8d558df074b65cd259b28372692032ca5d450104216d83b8a5887d2c2a33f57" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/e9/3f/c958e5ecf385a38208ed49b02775cc2db3f8a918a8c2337ba283ddb872a5/cuda_core-0.4.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0fb4a89d3770f89d2c9d79f502e255819887172ace0c4dd8f0cfbba62bb280e4" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a5/bf/26d84ac6405d045a1323aae96251249320e858288126b5b6974cd78b2f48/cuda_core-0.4.0-cp313-cp313-win_amd64.whl", hash = "sha256:475b9efefc9653ec1b14a872c8cedee8ef9f14fdc1b99210d1be619cca7bca9a" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/23/3f/a4a0c51cafbf191519dabc462b0c0f13ed998eebd2faab31d5012e794a72/cuda_core-0.4.0-cp313-cp313t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8554e507e1c420b58aed77aea59cab76ae6e9167fa39004c8f5a4161a67c3067" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/5b/88/9c1780d6ba73a0c9e62e7efed99c4972f1bc4fc26f42ff98c5513da8e4ce/cuda_core-0.4.0-cp313-cp313t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:627e4381bfba6f3685e7271468efa7b27ac959432fdaafea53211329f29f6b0b" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/17/ac/286dbfedd3aba93af7b4e15dac83dc40d91adcd35977c9c5f47f65228211/cuda_core-0.4.0-cp313-cp313t-win_amd64.whl", hash = "sha256:45d7a98cf875c9dfa4efd38017eda613971c5fcfec1cd5ab4708b190f0f4684c" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a9/40/85060488b6312219078b7bb8c799f6b60b74fcc73e6e7f158ec8303d48b9/cuda_core-0.4.0-cp314-cp314-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d19f235a28d848880305f6c48b5bed57b46d38f6d1dd16a697237770b9b71a92" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/9a/b0/9c222bcf535404f2c16ef9ff468d536cbac1ed6b59e425ab3b607029cb3a/cuda_core-0.4.0-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:99a780aca5c3ee3bfc8062c170221186c35cd76cff24bb76e6377f2abe312a2b" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/9c/2a/c41b33bf816102044e2b334fe860010bcfb4e72eda48dd01704e115e7366/cuda_core-0.4.0-cp314-cp314-win_amd64.whl", hash = "sha256:eb443ffaeac5f4daea7f6c29e659915318fa55eb3590768249dd08fd722084b8" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/13/ec/329009581d80f0214fc8d6f3f2ea1d6dc1bb187081bfdcca860dda8bf941/cuda_core-0.4.0-cp314-cp314t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5069862292f076c215b5a82906893e9b7a01f2fb24edbb4debcc301319c2ae64" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/27/b9/83673cf89abee84f3bddeccc70732a493e2b57a9c7f76026a80564cf5e1e/cuda_core-0.4.0-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5a66be09276e5217b8251493253b0372ef25e6504604d36bde8bf6d6fad2dfef" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/18/2f/dfafece563c80c2e2efb20e59ba4cfebbb77169c8ae138a5a825a4fd7e2d/cuda_core-0.4.0-cp314-cp314t-win_amd64.whl", hash = "sha256:90a29c858561a199208c4dcf780d294f1bb1f506295903c03e901873b59c90b9" },
+]
+
+[[package]]
 name = "cuda-pathfinder"
-version = "1.3.0"
+version = "1.2.3"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
 wheels = [
-    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/26/c8/3aed1450eae91794841653340cf554091dfa33a68214ab9dadcf903b3490/cuda_pathfinder-1.3.0-py3-none-any.whl", hash = "sha256:2e904a408ab4ebfba5b3ee67ecd15383487ffe109fc6e1f2e2ea61577e4519be" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/59/a3/57d2f674872f4e6b7da569b6df96ed80dc5c000cfd847ebeba5124faae4b/cuda_pathfinder-1.2.3-py3-none-any.whl", hash = "sha256:e6cf54d550441e878002d9ec9d280863ef0d6bb2bd8f52ca01582a5f381eace4" },
+]
+
+[[package]]
+name = "cuda-python"
+version = "12.9.0"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "cuda-bindings" },
+]
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/24/3c/4475aebeaab9651f2e61000fbe76f91a476d371dbfbf0a1cf46e689af253/cuda_python-12.9.0-py3-none-any.whl", hash = "sha256:926acba49b2c0a0374c61b7c98f337c085199cf51cdfe4d6423c4129c20547a7" },
 ]
 
 [[package]]
@@ -528,6 +588,36 @@ source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
 sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a9/95/a3dbbb5028f35eafb79008e7522a75244477d2838f38cbb722248dabc2a8/cycler-0.12.1.tar.gz", hash = "sha256:88bb128f02ba341da8ef447245a9e138fae777f6a23943da4540077d3601eb1c" }
 wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30" },
+]
+
+[[package]]
+name = "cython"
+version = "3.2.2"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/29/17/55fc687ba986f2210298fa2f60fec265fa3004c3f9a1e958ea1fe2d4e061/cython-3.2.2.tar.gz", hash = "sha256:c3add3d483acc73129a61d105389344d792c17e7c1cee24863f16416bd071634" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/57/0f/6fd78dc581373722bb9dedfc90c35b59ba88af988756315af227a877c7a2/cython-3.2.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:692a41c8fe06fb2dc55ca2c8d71c80c469fd16fe69486ed99f3b3cbb2d3af83f" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b0/52/50b6263c2fbad73aae8911ce54641ee1739d430a0592d3b3510591d7842b/cython-3.2.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:098590c1dc309f8a0406ade031963a95a87714296b425539f9920aebf924560d" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/d6/44/4e34d161674c9162c6eb9ddef0cd69d41d92ae7e6dee3945fed3a6871ebe/cython-3.2.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a3898c076e9c458bcb3e4936187919fda5f5365fe4c567d35d2b003444b6f3fe" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/62/8a/ffc2df024c1341737008fbaf0fbea51ef983a7146b43b84a239f197cf005/cython-3.2.2-cp312-cp312-win_amd64.whl", hash = "sha256:2b910b89a2a71004064c5e890b9512a251eda63fae252caa0feb9835057035f9" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a2/4f/b5355918962ec28b376eb8e357c718d58baf32d6df7017be8d147dd4ba29/cython-3.2.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:aa24cd0bdab27ca099b2467806c684404add597c1108e07ddf7b6471653c85d7" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/46/21/a8038c8253e7a5241ed1db6d031bac586f7a502d92f487124abbc3f3e94f/cython-3.2.2-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:60f4aa425e1ff98abf8d965ae7020f06dd2cbc01dbd945137d2f9cca4ff0524a" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/57/c1/76928c07176a4402c74d5b304936ad8ee167dd04a07cf7dca545e8c25f9b/cython-3.2.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a473df474ba89e9fee81ee82b31062a267f9e598096b222783477e56d02ad12c" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/fa/cb/ce641e07ba9c0cde8468e83e0214fb87020b74ba34dbb9dfe8d250a327f5/cython-3.2.2-cp313-cp313-win_amd64.whl", hash = "sha256:b4df52101209817fde7284cf779156f79142fb639b1d7840f11680ff4bb30604" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/c0/f2/cd60f639f0fde38b71319d7b6808e1ff17a6fd7f3feaff475b866a5c0aef/cython-3.2.2-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:177faf4d61e9f2d4d2db61194ac9ec16d3fe3041c1b6830f871a01935319eeb3" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/5d/45/6f155a9ad125536d8f30716c4d7571caae73ec811039d3ae33f9b535090d/cython-3.2.2-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8db28aef793c81dc69383b619ca508668998aaf099cd839d3cbae85184cce744" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/af/7e/022c25886fdc3ff6a005b6ae4a1c3d8522006bb738367aa5bd6c2590130b/cython-3.2.2-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3de43a5786033a27fae1c882feb5ff0d023c38b83356e6800c1be0bcd6cf9f11" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b6/07/1e3e4faf6f785d5ba053e9d6320b3f338162dc122c27a7c540b49615fc39/cython-3.2.2-cp314-cp314-win_amd64.whl", hash = "sha256:fed44d0ab2d36f1b0301c770b0dafec23bcb9700d58e7769cd6d9136b3304c11" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/f4/69/5430879d35235ec3d5ffd778862173b6419390509ae4e37a72bdd45d9e86/cython-3.2.2-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:a6387e3ad31342443916db9a419509935fddd8d4cbac34aab9c895ae55326a56" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/51/fa/584f4b56b35b3e7a43dc16603dd722cb5528484da67c27136534b782827b/cython-3.2.2-cp39-abi3-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:436eb562d0affbc0b959f62f3f9c1ed251b9499e4f29c1d19514ae859894b6bf" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/d1/d4/063c34a34d9ef54836a5dafb100b8f4fdbdaa63942913fe93f9eb93a11a2/cython-3.2.2-cp39-abi3-manylinux2014_armv7l.manylinux_2_17_armv7l.manylinux_2_31_armv7l.whl", hash = "sha256:f560ff3aea5b5df93853ec7bf1a1e9623d6d511f4192f197559aca18fca43392" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b9/44/c0b8854e0bf6d444c88cc2050f550d964596daea20eaf1bc592fcfde2782/cython-3.2.2-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d8c93fe128b58942832b1fcac96e48f93c2c69b569eff0d38d30fb5995fecfa0" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/90/6f/741186935c52de99acf4d7fad5c3dcf28d980b4c95d171d9618f9c399316/cython-3.2.2-cp39-abi3-musllinux_1_2_armv7l.whl", hash = "sha256:b4fe499eed7cd70b2aa4e096b9ce2588f5e6fdf049b46d40a5e55efcde6e4904" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/5c/79/3e487876addd0d69c148a529f3973c1942498ad39cede1e63565676064ed/cython-3.2.2-cp39-abi3-musllinux_1_2_i686.whl", hash = "sha256:14432d7f207245a3c35556155873f494784169297b28978a6204f1c60d31553e" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/15/b9/d9a103feb74d04579c6bde7b0cad6d5f45c002d843ca70788a5758707b68/cython-3.2.2-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:820c4a99dbf6b3e6c0300be42b4040b501eff0e1feeb80cfa52c48a346fb0df2" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/18/56/90445707cff62ab72136857a0134c5e50f9c73920c1a3af5218dfdae1c19/cython-3.2.2-cp39-abi3-win32.whl", hash = "sha256:826cad0ad43ab05a26e873b5d625f64d458dc739ec6fdeecab848b60a91c4252" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/44/54/25a98c2731521ac9fc18e17d79a0e7d58164d4db398f09e1bd24cdd27ed1/cython-3.2.2-cp39-abi3-win_arm64.whl", hash = "sha256:5f818d40bbcf17e2089e2de7840f0de1c0ca527acf9b044aba79d5f5d8a5bdba" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/76/f2/98fd8d0b514622a789fd2824b59bd6041b799aaeeba14a8d92d52f6654dd/cython-3.2.2-py3-none-any.whl", hash = "sha256:13b99ecb9482aff6a6c12d1ca6feef6940c507af909914b49f568de74fa965fb" },
 ]
 
 [[package]]
@@ -951,6 +1041,15 @@ http = [
 ]
 
 [[package]]
+name = "fuzzywuzzy"
+version = "0.18.0"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/11/4b/0a002eea91be6048a2b5d53c5f1b4dafd57ba2e36eea961d05086d7c28ce/fuzzywuzzy-0.18.0.tar.gz", hash = "sha256:45016e92264780e58972dca1b3d939ac864b78437422beecebb3095f8efd00e8" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/43/ff/74f23998ad2f93b945c0309f825be92e04e0348e062026998b5eefef4c33/fuzzywuzzy-0.18.0-py2.py3-none-any.whl", hash = "sha256:928244b28db720d1e0ee7587acf660ea49d7e4c632569cad4f1cd7e68a5f0993" },
+]
+
+[[package]]
 name = "gguf"
 version = "0.17.1"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
@@ -1067,6 +1166,15 @@ wheels = [
 ]
 
 [[package]]
+name = "immutabledict"
+version = "4.2.2"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/ce/12/1da8e1a9050d0603ba65fb1796ed8860a705b906701c96e77f85cc7490be/immutabledict-4.2.2.tar.gz", hash = "sha256:cb6ed3090df593148f94cb407d218ca526fd2639694afdb553dc4f50ce6feeca" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/63/7b/04ab6afa1ff7eb9ccb09049918c0407b205f5009092c0416147d163e4e2b/immutabledict-4.2.2-py3-none-any.whl", hash = "sha256:97c31d098a2c850e93a958badeef765e4736ed7942ec73e439facd764a3a7217" },
+]
+
+[[package]]
 name = "interegular"
 version = "0.3.3"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
@@ -1159,6 +1267,12 @@ sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/72/3a/79a912fb
 wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/c0/5a/9cac0c82afec3d09ccd97c8b6502d48f165f9124db81b4bcb90b4af974ee/jedi-0.19.2-py2.py3-none-any.whl", hash = "sha256:a8ef22bde8490f57fe5c7681a3c83cb58874daf72b4784de3cce5b6ef6edb5b9" },
 ]
+
+[[package]]
+name = "jieba"
+version = "0.42.1"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/c6/cb/18eeb235f833b726522d7ebed54f2278ce28ba9438e3135ab0278d9792a2/jieba-0.42.1.tar.gz", hash = "sha256:055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2" }
 
 [[package]]
 name = "jinja2"
@@ -1359,6 +1473,15 @@ wheels = [
 ]
 
 [[package]]
+name = "langdetect"
+version = "1.0.9"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/0e/72/a3add0e4eec4eb9e2569554f7c70f4a3c27712f40e3284d483e88094cc0e/langdetect-1.0.9.tar.gz", hash = "sha256:cbc1fef89f8d062739774bd51eda3da3274006b3661d199c2655f6b3f6d605a0" }
+
+[[package]]
 name = "lark"
 version = "1.2.2"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
@@ -1473,6 +1596,16 @@ api = [
     { name = "tenacity" },
     { name = "tiktoken" },
     { name = "tqdm" },
+]
+ifeval = [
+    { name = "immutabledict" },
+    { name = "langdetect" },
+    { name = "nltk" },
+]
+longbench = [
+    { name = "fuzzywuzzy" },
+    { name = "jieba" },
+    { name = "rouge" },
 ]
 
 [package.metadata]
@@ -1872,6 +2005,22 @@ wheels = [
 ]
 
 [[package]]
+name = "modelscope"
+version = "1.32.0"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "filelock" },
+    { name = "requests" },
+    { name = "setuptools" },
+    { name = "tqdm" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/6d/4d/a0961c29177906dff58de5c328a0b183ca8ebf33961fe5a91ddbfd4fae9c/modelscope-1.32.0.tar.gz", hash = "sha256:b717c11cef11c57d1d47b69da06f5888e634925e72de9adc3ccb1d29c74c9821" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/64/92/b24fd3d91d87bf2189a422d6acea736505616b54706eadf141d2298c7a1b/modelscope-1.32.0-py3-none-any.whl", hash = "sha256:b47711464766ac626b1ad72772619f05881deeeefdfc7c0b6495d4463963e24e" },
+]
+
+[[package]]
 name = "moe-routing"
 version = "0.1.0"
 source = { virtual = "." }
@@ -1885,8 +2034,11 @@ dependencies = [
     { name = "flashinfer-python" },
     { name = "frozendict" },
     { name = "jinja2" },
-    { name = "lm-eval", extra = ["api"] },
+    { name = "lm-eval", extra = ["api", "ifeval", "longbench"] },
     { name = "matplotlib" },
+    { name = "nvidia-nvshmem-cu12" },
+    { name = "nvshmem4py-cu12" },
+    { name = "pplx-kernels" },
     { name = "pyarrow" },
     { name = "scikit-learn" },
     { name = "scikit-optimize" },
@@ -1903,6 +2055,7 @@ dev = [
     { name = "ipykernel" },
     { name = "ipywidgets" },
     { name = "libcst" },
+    { name = "modelscope" },
     { name = "py-spy" },
     { name = "ruff" },
     { name = "setuptools-scm" },
@@ -1919,8 +2072,11 @@ requires-dist = [
     { name = "flashinfer-python", specifier = ">=0.3.1.post1" },
     { name = "frozendict", specifier = ">=2.4.6" },
     { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "lm-eval", extras = ["api"], editable = "lm-evaluation-harness" },
+    { name = "lm-eval", extras = ["api", "longbench", "ifeval"], editable = "lm-evaluation-harness" },
     { name = "matplotlib", specifier = ">=3.10.3" },
+    { name = "nvidia-nvshmem-cu12", specifier = ">=3.4.5" },
+    { name = "nvshmem4py-cu12", specifier = ">=0.2.0" },
+    { name = "pplx-kernels", editable = "pplx-kernels" },
     { name = "pyarrow", specifier = ">=20.0.0" },
     { name = "scikit-learn", specifier = ">=1.6.1" },
     { name = "scikit-optimize", specifier = ">=0.10.2" },
@@ -1937,6 +2093,7 @@ dev = [
     { name = "ipykernel", specifier = ">=6.29.5" },
     { name = "ipywidgets", specifier = ">=8.1.7" },
     { name = "libcst", specifier = ">=1.8.2" },
+    { name = "modelscope", specifier = ">=1.32.0" },
     { name = "py-spy", specifier = ">=0.4.1" },
     { name = "ruff", specifier = ">=0.12.2" },
     { name = "setuptools-scm", specifier = ">=9.2.0" },
@@ -2135,7 +2292,7 @@ wheels = [
 
 [[package]]
 name = "nltk"
-version = "3.8.1"
+version = "3.9.2"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
 dependencies = [
     { name = "click" },
@@ -2143,9 +2300,9 @@ dependencies = [
     { name = "regex" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/57/49/51af17a2b0d850578d0022408802aa452644d40281a6c6e82f7cb0235ddb/nltk-3.8.1.zip", hash = "sha256:1834da3d0682cba4f2cede2f9aad6b0fafb6461ba451db0efb6f9c39798d64d3" }
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/f9/76/3a5e4312c19a028770f86fd7c058cf9f4ec4321c6cf7526bab998a5b683c/nltk-3.9.2.tar.gz", hash = "sha256:0f409e9b069ca4177c1903c3e843eef90c7e92992fa4931ae607da6de49e1419" }
 wheels = [
-    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a6/0a/0d20d2c0f16be91b9fa32a77b76c60f9baf6eba419e5ef5deca17af9c582/nltk-3.8.1-py3-none-any.whl", hash = "sha256:fd5c9109f976fa86bcadba8f91e47f5e9293bd034474752e92a520f81c93dda5" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/60/90/81ac364ef94209c100e12579629dc92bf7a709a84af32f8c551b02c07e94/nltk-3.9.2-py3-none-any.whl", hash = "sha256:1e209d2b3009110635ed9709a67a1a3e33a10f799490fa71cf4bec218c11c88a" },
 ]
 
 [[package]]
@@ -2400,11 +2557,39 @@ wheels = [
 ]
 
 [[package]]
+name = "nvidia-nvshmem-cu12"
+version = "3.4.5"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/1d/6a/03aa43cc9bd3ad91553a88b5f6fb25ed6a3752ae86ce2180221962bc2aa5/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0b48363fc6964dede448029434c6abed6c5e37f823cb43c3bcde7ecfc0457e15" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/b5/09/6ea3ea725f82e1e76684f0708bbedd871fc96da89945adeba65c3835a64c/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:042f2500f24c021db8a06c5eec2539027d57460e1c1a762055a6554f72c369bd" },
+]
+
+[[package]]
 name = "nvidia-nvtx-cu12"
 version = "12.8.90"
 source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
 wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/a2/eb/86626c1bbc2edb86323022371c39aa48df6fd8b0a1647bc274577f72e90b/nvidia_nvtx_cu12-12.8.90-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5b17e2001cc0d751a5bc2c6ec6d26ad95913324a4adb86788c944f8ce9ba441f" },
+]
+
+[[package]]
+name = "nvshmem4py-cu12"
+version = "0.2.0"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "cuda-core" },
+    { name = "cuda-pathfinder" },
+    { name = "cuda-python" },
+    { name = "cython" },
+    { name = "numpy" },
+    { name = "nvidia-nvshmem-cu12" },
+]
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/79/da/3f448fd348efd688fd2658f8200a773a54401916eb7d1aedba8888ebe1b7/nvshmem4py_cu12-0.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_34_aarch64.whl", hash = "sha256:bb8dd888a9a632f1677592ccf99736403b4cf288f606f11b8cb58ba359d44683" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/ad/e3/f8c8515ad8a13faeca3d2449a97325db05fb6a8ccafa1adbfd04c4c9e326/nvshmem4py_cu12-0.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_34_x86_64.whl", hash = "sha256:ca6b1c3114d25533327b4bcaf6c3f9caeaf39cfcefdd871a6788532036cec278" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/2d/07/150254bacc62d64a1e31ede512a982222bf5cc4d1857f2405e8c6e93f3e0/nvshmem4py_cu12-0.2.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_34_aarch64.whl", hash = "sha256:9539fe3baaf0314770d93e901cd7f9ec7bedce185e09a8a2245b4859495d9664" },
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/50/e1/2040694b4d1f8e689a3f041fdb36075dfa8c616616aa43053590882f6f63/nvshmem4py_cu12-0.2.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_34_x86_64.whl", hash = "sha256:924189578e5ea6d52746c3c9501e2883bfc86f9db5e6cc5254e1ddbfd2138afb" },
 ]
 
 [[package]]
@@ -2680,6 +2865,11 @@ sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/5e/77/65b857a6
 wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl", hash = "sha256:3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968" },
 ]
+
+[[package]]
+name = "pplx-kernels"
+version = "0.0.1"
+source = { editable = "pplx-kernels" }
 
 [[package]]
 name = "prometheus-client"
@@ -3470,6 +3660,18 @@ wheels = [
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/1e/0e/22abda23cc6d20901262fcfea50c25ed66ca6e1a5dc610d338df4ca10407/rignore-0.7.0-cp314-cp314-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:09dfad3ca450b3967533c6b1a2c7c0228c63c518f619ff342df5f9c3ed978b66" },
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/ed/8d/0ba2c712723fdda62125087d00dcdad93102876d4e3fa5adbb99f0b859c3/rignore-0.7.0-cp314-cp314-win32.whl", hash = "sha256:2850718cfb1caece6b7ac19a524c7905a8d0c6627b0d0f4e81798e20b6c75078" },
     { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/1c/63/0d7df1237c6353d1a85d8a0bc1797ac766c68e8bc6fbca241db74124eb61/rignore-0.7.0-cp314-cp314-win_amd64.whl", hash = "sha256:2401637dc8ab074f5e642295f8225d2572db395ae504ffc272a8d21e9fe77b2c" },
+]
+
+[[package]]
+name = "rouge"
+version = "1.0.1"
+source = { registry = "https://mirrors.sustech.edu.cn/pypi/web/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/db/e4/3420a1ab1e82a280fb6107f7ae99e88eb12383c978fe573c0c64d0327d6b/rouge-1.0.1.tar.gz", hash = "sha256:12b48346ca47d6bcf3c45061f315452b9ccec0620ee895ec85b7efc3d54aae34" }
+wheels = [
+    { url = "https://mirrors.sustech.edu.cn/pypi/web/packages/32/7c/650ae86f92460e9e8ef969cc5008b24798dcf56a9a8947d04c78f550b3f5/rouge-1.0.1-py3-none-any.whl", hash = "sha256:28d118536e8c774dc47d1d15ec266479b4dd0914c4672ce117d4002789bdc644" },
 ]
 
 [[package]]
