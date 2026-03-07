@@ -1,5 +1,6 @@
 import torch
 import functools
+from typing import Sequence
 
 def baseline(ppls, config):
     """
@@ -222,6 +223,27 @@ def spec_with_list_layer_range(cfg: tuple[float], layer_range: tuple[int, ...], 
 
 def constant_k(k: int, ppls, config):
     return torch.full_like(ppls, k, dtype=torch.int64)
+
+def spec_from_layer_cfgs(
+    layer_cfgs: Sequence[Sequence[float]],
+    ppls: torch.FloatTensor,
+    config,
+):
+    """
+    layer_cfgs: length = num_layers
+      each element is a t-space cfg tuple/list, e.g. (t0,t1,t2,t3)
+    returns:
+      all_k: int tensor (num_layers, num_tokens)
+    """
+    num_layers = int(config.num_hidden_layers)
+
+    if len(layer_cfgs) != num_layers:
+        raise ValueError(f"layer_cfgs length {len(layer_cfgs)} != num_layers {num_layers}")
+
+    ks = []
+    for cfg in layer_cfgs:
+        ks.append(_calc_segment(tuple(float(x) for x in cfg), ppls, config))
+    return torch.stack(ks, dim=0)
 
 if __name__ == "__main__":
     print(spec_with_list_layer_range(
