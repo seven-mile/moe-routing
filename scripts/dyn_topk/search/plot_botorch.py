@@ -72,7 +72,7 @@ def main():
     ap.add_argument("--infile", type=str, default="optimization_results_lmeval.json",
                     help="Path to results json (must contain score + mean_topk).")
     ap.add_argument("--out_png", type=str, default="pareto_score_vs_meantopk.png")
-    ap.add_argument("--out_pareto_json", type=str, default="pareto_frontier_points.json")
+    # ap.add_argument("--out_pareto_json", type=str, default="pareto_frontier_points.json")
     args = ap.parse_args()
 
     path = Path(args.infile)
@@ -106,9 +106,9 @@ def main():
     plt.tight_layout()
     plt.savefig(args.out_png, dpi=200)
 
-    Path(args.out_pareto_json).write_text(json.dumps(pareto_rows, indent=2))
+    # Path(args.out_pareto_json).write_text(json.dumps(pareto_rows, indent=2))
     print(f"Saved plot: {args.out_png}")
-    print(f"Saved pareto points: {args.out_pareto_json}")
+    # print(f"Saved pareto points: {args.out_pareto_json}")
     print(f"All points: {len(rows)} | Pareto points: {len(pareto_rows)}")
 
 

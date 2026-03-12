@@ -31,16 +31,20 @@ logging.getLogger("transformers").setLevel(logging.WARNING)
 logging.getLogger("datasets").setLevel(logging.WARNING)
 
 # ----------------------------
-# Param conversion (unchanged)
+# Param conversion (variable dimensions)
 # ----------------------------
 def convert_point_to_formula(point: Sequence[float]) -> Tuple[float, ...]:
-    """Converts a point (p0,p1,p2,p3) to cumulative product formula."""
+    """Converts a point (p0,p1,...,pn) to cumulative product formula."""
     return tuple(accumulate(point, lambda x, y: x * y))
 
 def convert_formula_to_point(formula: Sequence[float]) -> Tuple[float, ...]:
-    """Converts cumulative product formula back to (p0,p1,p2,p3)."""
-    p0, p1, p2, p3 = formula
-    return (p0, p1 / p0, p2 / p1, p3 / p2)
+    """Converts cumulative product formula back to (p0,p1,...,pn)."""
+    if len(formula) == 0:
+        return tuple()
+    result = [formula[0]]
+    for i in range(1, len(formula)):
+        result.append(formula[i] / formula[i - 1])
+    return tuple(result)
 
 def is_monotone_nonincreasing(formula: Sequence[float]) -> bool:
     return all(formula[i] >= formula[i + 1] for i in range(len(formula) - 1))
@@ -136,12 +140,14 @@ def safe_float(x: Any, default: float = float("nan")) -> float:
 # Main optimization (BoTorch MOO)
 # ----------------------------
 def run_optimization(args: argparse.Namespace):
-    # Search space bounds for point = (p0,p1,p2,p3)
-    # Keep original space:
-    # p0 in [1,20], p1,p2,p3 in [0,1]
+    # Search space bounds for point = (p0,p1,...,pn)
+    # p0 in [1,20], p1,p2,...,pn in [0,1]
+    n_dims = args.n_dims
+    lower_bounds = [1.0] + [0.0] * (n_dims - 1)
+    upper_bounds = [20.0] + [1.0] * (n_dims - 1)
     bounds = torch.tensor([
-        [1.0, 0.0, 0.0, 0.0],
-        [20.0, 1.0, 1.0, 1.0],
+        lower_bounds,
+        upper_bounds,
     ], dtype=torch.double)
 
     output_path = Path(args.output_file)
@@ -186,26 +192,16 @@ def run_optimization(args: argparse.Namespace):
         except Exception:
             continue
 
-    train_X = torch.tensor(train_X_list, dtype=torch.double) if train_X_list else torch.empty(0, 4, dtype=torch.double)
+    train_X = torch.tensor(train_X_list, dtype=torch.double) if train_X_list else torch.empty(0, n_dims, dtype=torch.double)
     train_Y = torch.tensor(train_Y_list, dtype=torch.double) if train_Y_list else torch.empty(0, 2, dtype=torch.double)
 
-    # Add example point (same as original)
-    example_formula = (10.0, 6.58, 1.275, 1.0)
-    example_point = convert_formula_to_point(example_formula)
-    example_formula_str = str(example_formula)
-    if example_formula_str not in evaluated:
-        # not evaluated yet, but we don't force it as "initial" now; BoTorch loop will handle
-        logging.info("Example formula not found in history; it may be evaluated during optimization.")
-
     # If not enough initial data, do random warmup evaluations
-    def random_point() -> Tuple[float, float, float, float]:
+    def random_point() -> Tuple[float, ...]:
         p0 = random.uniform(1.0, 10.0)
-        p1 = random.uniform(0.0, 1.0)
-        p2 = random.uniform(0.0, 1.0)
-        p3 = random.uniform(0.0, 1.0)
-        return (p0, p1, p2, p3)
+        rest = [random.uniform(0.0, 1.0) for _ in range(n_dims - 1)]
+        return tuple([p0] + rest)
 
-    def evaluate_point(point: Tuple[float, float, float, float]) -> Tuple[float, float, Tuple[float, ...], str]:
+    def evaluate_point(point: Tuple[float, ...]) -> Tuple[float, float, Tuple[float, ...], str]:
         formula, fstr = point_to_formula_str(point)
 
         # Keep original monotonicity check & penalty path (should always pass with p1..p3 in [0,1])
@@ -292,7 +288,7 @@ def run_optimization(args: argparse.Namespace):
         # Optimize acquisition on unit cube
         candidate_n, _ = optimize_acqf(
             acq_function=acq,
-            bounds=torch.tensor([[0.0] * 4, [1.0] * 4], dtype=torch.double),
+            bounds=torch.tensor([[0.0] * n_dims, [1.0] * n_dims], dtype=torch.double),
             q=1,
             num_restarts=args.num_restarts,
             raw_samples=args.raw_samples,
@@ -301,7 +297,7 @@ def run_optimization(args: argparse.Namespace):
         cand_n = candidate_n.detach().double()
         cand = unnormalize(cand_n, bounds=bounds).view(-1)
 
-        point = (float(cand[0]), float(cand[1]), float(cand[2]), float(cand[3]))
+        point = tuple(float(cand[i]) for i in range(n_dims))
         formula, fstr = point_to_formula_str(point)
 
         # Dedup: if already evaluated, fallback to random new point
@@ -379,6 +375,7 @@ if __name__ == "__main__":
     parser.add_argument("--output_file", type=str, default="optimization_results_lmeval.json")
     parser.add_argument("--pareto_output_file", type=str, default="pareto_frontier.json")
 
+    parser.add_argument("--n_dims", type=int, default=4, help="Number of dimensions for the search space (default: 4).")
     parser.add_argument("--n_calls", type=int, default=100, help="Total number of evaluations to perform (including existing).")
     parser.add_argument("--n_initial_points", type=int, default=10, help="Random initial evaluations if history is insufficient.")
 
