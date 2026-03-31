@@ -33,6 +33,9 @@ def _calc_segment(
     boundaries = _get_cfg_boundaries(cfg, base_k)
     return torch.bucketize(ppls, boundaries, right=True)
 
+def _get_num_moe_layers(config) -> int:
+    return config.num_hidden_layers - getattr(config, "first_k_dense_replace", 0)
+
 def spec_default(ppls, config):
     return _calc_segment((6, 1.17, 1.07, 1.07), ppls, config)
 
@@ -51,7 +54,7 @@ def spec_aggresive(ppls, config):
     return _calc_segment((6, 1.17, 1.07, 1.035, 1.005, 1.005), ppls, config)
 
 def spec_layerwise1(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -64,7 +67,7 @@ def spec_layerwise1(ppls, config):
     return torch.stack(all_layer_ks)
 
 def spec_layerwise2(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     spec_formula = (6, 1.17, 1.07, 1.035, 1.005, 1.005)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -82,7 +85,7 @@ def spec_layerwise2(ppls, config):
 
 # based on default4, seek for even better benefit
 def spec_layerwise3(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -96,7 +99,7 @@ def spec_layerwise3(ppls, config):
 
 # ablation cases for early layers
 def spec_layerwise1_early0(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -111,7 +114,7 @@ def spec_layerwise1_early0(ppls, config):
 spec_layerwise_early0 = spec_layerwise1_early0
 
 def spec_layerwise1_early1(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -126,7 +129,7 @@ def spec_layerwise1_early1(ppls, config):
 spec_layerwise_early1 = spec_layerwise1_early1
 
 def spec_layerwise1_early4(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -141,7 +144,7 @@ def spec_layerwise1_early4(ppls, config):
 spec_layerwise_early4 = spec_layerwise1_early4
 
 def spec_default1_mask2025(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -155,7 +158,7 @@ def spec_default1_mask2025(ppls, config):
     return torch.stack(all_layer_ks)
 
 def spec_default2_mask2025(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -169,7 +172,7 @@ def spec_default2_mask2025(ppls, config):
     return torch.stack(all_layer_ks)
 
 def spec_default3_mask2025(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -183,7 +186,7 @@ def spec_default3_mask2025(ppls, config):
     return torch.stack(all_layer_ks)
 
 def spec_default4_mask2025(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (6, 1.17, 1.07, 1.07)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -197,7 +200,7 @@ def spec_default4_mask2025(ppls, config):
     return torch.stack(all_layer_ks)
 
 def spec_opt1_mask2025(ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     base_spec_formula = (10.0, 6.58, 1.275, 1.0)
     all_layer_ks = ()
     for lid in range(num_layers):
@@ -213,7 +216,7 @@ def spec_opt1_mask2025(ppls, config):
 spec_with_list_full_layers = _calc_segment
 
 def spec_with_list_layer_range(cfg: tuple[float], layer_range: tuple[int, ...], ppls, config):
-    num_layers = config.num_hidden_layers
+    num_layers = _get_num_moe_layers(config)
     basic = _calc_segment(tuple(cfg), ppls, config)
     all = basic.unsqueeze_(0).repeat(num_layers, 1)
     # Mask the layer range.
@@ -235,7 +238,7 @@ def spec_from_layer_cfgs(
     returns:
       all_k: int tensor (num_layers, num_tokens)
     """
-    num_layers = int(config.num_hidden_layers)
+    num_layers = _get_num_moe_layers(config)
 
     if len(layer_cfgs) != num_layers:
         raise ValueError(f"layer_cfgs length {len(layer_cfgs)} != num_layers {num_layers}")
@@ -250,5 +253,5 @@ if __name__ == "__main__":
         (6, 1.17, 1.07, 1.07, 1.035, 1.005, 1.005),
         (5, 10, 2),
         torch.tensor([1.5, 2.0, 2.5, 6.2, 6.0, 5.9, 1.165, 1.06, 1.0]),
-        type('Config', (), {'num_experts_per_tok':8, 'num_hidden_layers':12})
+        type('Config', (), {'num_experts_per_tok':8, 'num_hidden_layers':12, 'first_k_dense_replace':1})()
     ))
