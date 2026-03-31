@@ -65,13 +65,15 @@ def evaluate_with_lmeval(args: argparse.Namespace, formula: Tuple[float, ...]) -
         "base_url": args.base_url,
         "num_concurrent": args.num_concurrent,
         "max_retries": args.max_retries,
+        "timeout": -1,
         "tokenized_requests": False,
+        "tokenizer_backend": "none",
         "assisted_action": {
             "file": "configs/ppl_to_ks.py",
             "function": "spec_with_list_layer_range",
             "args": [
                 list(formula),
-                [20, 25],
+                [0, 0],
             ],
         },
     }
