@@ -62,7 +62,6 @@ def evaluate_with_lmeval(args: argparse.Namespace, formula: Tuple[float, ...]) -
 
     model_args_dict = {
         "model": args.model_name,
-        "base_url": args.base_url,
         "num_concurrent": args.num_concurrent,
         "max_retries": args.max_retries,
         "timeout": -1,
@@ -78,22 +77,44 @@ def evaluate_with_lmeval(args: argparse.Namespace, formula: Tuple[float, ...]) -
         },
     }
 
-    results = evaluator.simple_evaluate(
-        model="local-completions",
-        model_args=model_args_dict,
-        gen_kwargs={
+    evaluate_kwargs = {
+        "model_args": model_args_dict,
+        "gen_kwargs": {
             "temperature": 0.0,
         },
-        tasks=["gsm8k_cot"],
-        limit=args.num_samples if args.num_samples > 0 else None,
-    )
+        "tasks": args.task,
+        "limit": args.num_samples if args.num_samples > 0 else None,
+    }
+
+    # Task-specific setup.
+    if args.task == "ifeval":
+        evaluate_kwargs["model"] = "local-chat-completions"
+        model_args_dict["base_url"] = args.endpoint_url + "/chat/completions"
+        evaluate_kwargs["apply_chat_template"] = True
+        model_args_dict["enable_thinking"] = False
+    elif args.task == "gsm8k_cot":
+        evaluate_kwargs["model"] = "local-completions"
+        model_args_dict["base_url"] = args.endpoint_url + "/completions"
+    else:
+        raise ValueError(f"Unknown task: {args.task}")
+
+    results = evaluator.simple_evaluate(**evaluate_kwargs)
 
     # score
-    try:
-        score = results["results"]["gsm8k_cot"]["exact_match,flexible-extract"]
-    except KeyError:
-        logging.error("Missing gsm8k_cot exact_match,flexible-extract in lm_eval results.")
-        score = 0.0
+    if args.task == "ifeval":
+        try:
+            score = results["results"]["ifeval"]["prompt_level_strict_acc,none"]
+        except KeyError:
+            logging.error("Missing ifeval prompt_level_strict_acc,none in lm_eval results.")
+            score = 0.0
+    elif args.task == "gsm8k_cot":
+        try:
+            score = results["results"]["gsm8k_cot"]["exact_match,flexible-extract"]
+        except KeyError:
+            logging.error("Missing gsm8k_cot exact_match,flexible-extract in lm_eval results.")
+            score = 0.0
+    else:
+        raise ValueError(f"Unknown task: {args.task}")
 
     # mean_topk
     mean_topk = None
@@ -367,8 +388,9 @@ if __name__ == "__main__":
     )
 
     # --- lm_eval / local-completions ---
-    parser.add_argument("--base_url", type=str, default="http://127.0.0.1:8000/v1/completions")
-    parser.add_argument("--num_concurrent", type=int, default=128)
+    parser.add_argument("--task", type=str, choices=["ifeval", "gsm8k_cot"], default="gsm8k_cot")
+    parser.add_argument("--endpoint_url", type=str, default="http://127.0.0.1:8000/v1")
+    parser.add_argument("--num_concurrent", type=int, default=256)
     parser.add_argument("--max_retries", type=int, default=3)
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-30B-A3B")
     parser.add_argument("--num_samples", type=int, default=-1, help="lm_eval limit; -1 for all")
@@ -377,8 +399,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_file", type=str, default="optimization_results_lmeval.json")
     parser.add_argument("--pareto_output_file", type=str, default="pareto_frontier.json")
 
-    parser.add_argument("--n_dims", type=int, default=4, help="Number of dimensions for the search space (default: 4).")
-    parser.add_argument("--n_calls", type=int, default=100, help="Total number of evaluations to perform (including existing).")
+    parser.add_argument("--n_dims", type=int, default=5, help="Number of dimensions for the search space (default: 5).")
+    parser.add_argument("--n_calls", type=int, default=300, help="Total number of evaluations to perform (including existing).")
     parser.add_argument("--n_initial_points", type=int, default=10, help="Random initial evaluations if history is insufficient.")
 
     # --- BoTorch knobs ---
