@@ -51,6 +51,13 @@ LINEWIDTH_MAP = {
     'optimum': 2.2,
 }
 
+DISPLAY_LABEL_MAP = {
+    'vanilla': 'Vanilla',
+    'baseline': 'Baseline',
+    'lossless': 'Lossless',
+    'optimum': 'Optimum',
+}
+
 # 统一视觉语义：提升现代感，同时维持论文可读性
 STYLE = {
     'canvas_bg': '#FCFCFD',
@@ -63,6 +70,17 @@ STYLE = {
     'marker_border': (0.75, 0.81, 0.88, 0.55),
     'line_halo': (0.90, 0.93, 0.96, 0.95),
 }
+
+
+def normalize_label(label):
+    """Normalize labels for stable style lookup and baseline matching."""
+    return str(label).strip().lower()
+
+
+def display_label(label):
+    """Map internal label key to consistent display case."""
+    key = normalize_label(label)
+    return DISPLAY_LABEL_MAP.get(key, str(label))
 
 
 def load_and_extract_label(df):
@@ -102,13 +120,13 @@ def load_and_extract_label(df):
 def load_and_extract(args):
     """从CSV加载数据并按照labels分组提取"""
     df = pd.read_csv(args.file)
-    labels = args.labels
+    labels = [normalize_label(label) for label in args.labels]
     
     data_list = []
-    for label in labels:
-        mask = df["filename"].str.contains(label, na=False)
+    for raw_label, label in zip(args.labels, labels):
+        mask = df["filename"].str.contains(raw_label, na=False, case=False)
         if not mask.any():
-            raise ValueError(f"No data found for label: {label}")
+            raise ValueError(f"No data found for label: {raw_label}")
         label_df = df[mask]
         data_list.append(load_and_extract_label(label_df))
     
@@ -195,25 +213,25 @@ def save_standalone_legend(labels, out_file, fig_scale=1.35):
                 markeredgecolor=STYLE['marker_border'],
                 markerfacecolor=color,
                 alpha=0.95 if is_focus else 0.82,
-                label=label,
+                label=display_label(label),
             )
         )
 
     legend = fig_legend.legend(
         handles=handles,
-        labels=labels,
+        labels=[display_label(label) for label in labels],
         ncol=len(labels),
         loc='center',
         bbox_to_anchor=(0.5, 0.5),
         frameon=True,
         fancybox=True,
-        edgecolor='#D5DCE6',
-        facecolor='white',
-        framealpha=0.95,
+        facecolor='none',
+        framealpha=0.92,
         borderpad=0.5,
         handlelength=2.2,
         columnspacing=1.2,
     )
+    legend.get_frame().set_linewidth(0.6)
     for txt in legend.get_texts():
         txt.set_color(STYLE['text_main'])
 
@@ -281,7 +299,7 @@ def plot_metric_advanced(data_list, labels, metric, ylabel, out_file,
             markerfacecolor=color,
             color=color,
             linewidth=linewidth,
-            label=label,
+            label=display_label(label),
             zorder=zorder,
             linestyle='-',
             alpha=0.95 if is_focus else 0.82,
@@ -317,13 +335,13 @@ def plot_metric_advanced(data_list, labels, metric, ylabel, out_file,
         legend = ax.legend(
             frameon=True,
             fancybox=True,
-            edgecolor='#D5DCE6',
-            facecolor='white',
+            facecolor='none',
             framealpha=0.92,
             borderpad=0.55,
             handlelength=2.2,
-            loc='best'
+            loc='best',
         )
+        legend.get_frame().set_linewidth(0.6)
         for txt in legend.get_texts():
             txt.set_color(STYLE['text_main'])
     
