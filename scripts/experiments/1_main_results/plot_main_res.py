@@ -171,9 +171,10 @@ def style_axis(ax, batch_sizes, ylabel):
     ax.tick_params(axis='both', colors=STYLE['text_muted'], length=4, width=0.8)
 
 
-def save_standalone_legend(labels, out_file):
+def save_standalone_legend(labels, out_file, fig_scale=1.35):
     """单独导出图例文件，便于拼接subplot时复用。"""
-    fig_legend = plt.figure(figsize=(4.8, 0.75), facecolor='white')
+    base_w, base_h = 4.8, 0.75
+    fig_legend = plt.figure(figsize=(base_w / fig_scale, base_h / fig_scale), facecolor='white')
 
     handles = []
     for label in labels:
@@ -222,11 +223,13 @@ def save_standalone_legend(labels, out_file):
 
 
 def plot_metric_advanced(data_list, labels, metric, ylabel, out_file,
-                         show_legend=False, show=False):
+                         show_legend=False, show=False, fig_scale=1.35):
     """
     高级绘图函数
     """
-    fig, ax = plt.subplots(figsize=(5.2, 4.2), facecolor=STYLE['canvas_bg'])
+    # Shrink source canvas so that with fixed LaTeX include width, text appears relatively larger.
+    base_w, base_h = 5.2, 4.2
+    fig, ax = plt.subplots(figsize=(base_w / fig_scale, base_h / fig_scale), facecolor=STYLE['canvas_bg'])
     
     # 获取当前batch size值（用于显示具体数值）
     batch_sizes = data_list[0]["concurrency"].values if data_list else []
@@ -350,12 +353,16 @@ def main():
                         help="Output prefix for pdf files")
     parser.add_argument("--show", action="store_true",
                         help="Show plots")
+    parser.add_argument("--fig_scale", type=float, default=1.35,
+                        help="Scale factor to shrink source canvas. Typical range: 1.2-1.5.")
     parser.add_argument("--with_legend", action="store_true",
                         help="Enable legend in main plots (disabled by default)")
     parser.add_argument("--no_legend_file", action="store_true",
                         help="Disable standalone legend export")
     
     args = parser.parse_args()
+    if args.fig_scale <= 0:
+        raise ValueError("--fig_scale must be > 0")
     
     data_list, labels = load_and_extract(args)
     
@@ -367,13 +374,15 @@ def main():
         ylabel="Throughput (tokens/s)",
         out_file=args.out_prefix + "_throughput",
         show_legend=args.with_legend,
-        show=args.show
+        show=args.show,
+        fig_scale=args.fig_scale,
     )
 
     if not args.no_legend_file:
         save_standalone_legend(
             labels=labels,
-            out_file=args.out_prefix + "_legend"
+            out_file=args.out_prefix + "_legend",
+            fig_scale=args.fig_scale,
         )
     
     # plot_metric_advanced(
