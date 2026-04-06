@@ -22,7 +22,6 @@ plt.rcParams.update({
     'lines.linewidth': 1.5,
     'lines.markersize': 6,
     'axes.titlepad': 10,
-    'figure.facecolor': '#FCFCFD',
     'axes.facecolor': '#F7F8FA',
 })
 
@@ -31,8 +30,8 @@ plt.rcParams.update({
 COLOR_MAP = {
     'vanilla': '#9E9E9E',      # 灰色 - 中立
     'baseline': '#000000',     # 黑色 - 参考
-    'lossless': '#64B5F6',     # 浅蓝 - 主角1
-    'optimum': '#E64B2E',      # 红色 - 主角2
+    'lossless': '#2a9d8f',
+    'optimum': '#8b5fbf',
 }
 
 # 主角的标记样式突出显示
@@ -60,7 +59,6 @@ DISPLAY_LABEL_MAP = {
 
 # 统一视觉语义：提升现代感，同时维持论文可读性
 STYLE = {
-    'canvas_bg': '#FCFCFD',
     'panel_bg': '#F7F8FA',
     'grid_major': '#D7DDE6',
     'grid_minor': '#E9EDF3',
@@ -247,7 +245,7 @@ def plot_metric_advanced(data_list, labels, metric, ylabel, out_file,
     """
     # Shrink source canvas so that with fixed LaTeX include width, text appears relatively larger.
     base_w, base_h = 5.2, 4.2
-    fig, ax = plt.subplots(figsize=(base_w / fig_scale, base_h / fig_scale), facecolor=STYLE['canvas_bg'])
+    fig, ax = plt.subplots(figsize=(base_w / fig_scale, base_h / fig_scale))
     
     # 获取当前batch size值（用于显示具体数值）
     batch_sizes = data_list[0]["concurrency"].values if data_list else []
