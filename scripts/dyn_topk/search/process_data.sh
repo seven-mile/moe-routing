@@ -68,8 +68,14 @@ run_case "$RESULT_DIR/optimization_results_lmeval_30b_eagle3_ifeval.json" \
 
 run_case "$RESULT_DIR/optimization_results_lmeval_glm47flash_mtp_gsm8k_cot.json" \
     --baseline_score 84.53 \
+    --baseline_score_std 1.00 \
     --baseline_topk 4
 
-run_case "$RESULT_DIR/optimization_results_lmeval_r1_mtp_gsm8k_cot_8d_apply_last.json" \
-    --baseline_score 91.74 \
+# run_case "$RESULT_DIR/optimization_results_lmeval_r1_mtp_gsm8k_cot_8d_apply_last.json" \
+#     --baseline_score 91.74 \
+#     --baseline_topk 8
+
+run_case "$RESULT_DIR/optimization_results_lmeval_r1_mtp_gsm8k_cot_5d.json" \
+    --baseline_score 92.34 \
+    --baseline_score_std 0.57 \
     --baseline_topk 8
