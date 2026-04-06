@@ -357,8 +357,8 @@ def main():
                         help="Scale factor to shrink source canvas. Typical range: 1.2-1.5.")
     parser.add_argument("--with_legend", action="store_true",
                         help="Enable legend in main plots (disabled by default)")
-    parser.add_argument("--no_legend_file", action="store_true",
-                        help="Disable standalone legend export")
+    parser.add_argument("--legend_file", action="store_true",
+                        help="Enable standalone legend export")
     
     args = parser.parse_args()
     if args.fig_scale <= 0:
@@ -378,7 +378,7 @@ def main():
         fig_scale=args.fig_scale,
     )
 
-    if not args.no_legend_file:
+    if args.legend_file:
         save_standalone_legend(
             labels=labels,
             out_file=args.out_prefix + "_legend",
