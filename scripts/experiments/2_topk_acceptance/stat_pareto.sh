@@ -9,6 +9,11 @@ Required:
   -i  Input optimization json for calc_pareto.py
   -o  Output directory for per-case logs
 
+Optional:
+    -c  Concurrency passed to bench_serve.sh (default: 512)
+    -n  Num prompts passed to bench_serve.sh (default: 512)
+    -l  Output length passed to bench_serve.sh (default: 256)
+
 Behavior:
   - Run baseline once
   - Run one case for each formula emitted by calc_pareto.py
@@ -26,12 +31,19 @@ EOF
 INFILE=""
 OUTDIR=""
 
+CONC=512
+NUM=512
+LEN=256
+
 EXTRA_ARGS=()
 
-while getopts ":i:o:h" opt; do
+while getopts ":i:o:c:n:l:h" opt; do
     case "$opt" in
         i) INFILE="$OPTARG" ;;
         o) OUTDIR="$OPTARG" ;;
+        c) CONC="$OPTARG" ;;
+        n) NUM="$OPTARG" ;;
+        l) LEN="$OPTARG" ;;
         h)
             usage
             exit 0
@@ -75,6 +87,19 @@ if [[ ! -f "$INFILE" ]]; then
     exit 1
 fi
 
+if ! [[ "$CONC" =~ ^[0-9]+$ ]]; then
+    echo "Invalid -c value: $CONC" >&2
+    exit 2
+fi
+if ! [[ "$NUM" =~ ^[0-9]+$ ]]; then
+    echo "Invalid -n value: $NUM" >&2
+    exit 2
+fi
+if ! [[ "$LEN" =~ ^[0-9]+$ ]]; then
+    echo "Invalid -l value: $LEN" >&2
+    exit 2
+fi
+
 mkdir -p "$OUTDIR"
 
 mapfile -t FORMULAS < <(python3 "$CALC_PARETO" -i "$INFILE")
@@ -93,7 +118,7 @@ run_case() {
     ) 2>&1 | tee "$log_file"
 }
 
-run_case "baseline" "$OUTDIR/baseline.log" -c 512 -n 512 -l 256 "${EXTRA_ARGS[@]}"
+run_case "baseline" "$OUTDIR/baseline.log" -c "$CONC" -n "$NUM" -l "$LEN" "${EXTRA_ARGS[@]}"
 
 idx=1
 for formula in "${FORMULAS[@]}"; do
@@ -104,7 +129,7 @@ for formula in "${FORMULAS[@]}"; do
     fi
 
     log_file="$OUTDIR/formula_$(printf "%03d" "$idx").log"
-    run_case "formula_$idx" "$log_file" -c 512 -n 512 -l 256 -f "[$formula]" "${EXTRA_ARGS[@]}"
+    run_case "formula_$idx" "$log_file" -c "$CONC" -n "$NUM" -l "$LEN" -f "[$formula]" "${EXTRA_ARGS[@]}"
     idx=$((idx + 1))
 done
 
