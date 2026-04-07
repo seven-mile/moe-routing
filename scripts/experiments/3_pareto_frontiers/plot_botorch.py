@@ -260,6 +260,7 @@ def write_outputs(
     out_pdf,
     legend_pdf=None,
     baseline_score_std=0.0,
+    y_min_override=None,
 ):
     scores = np.array([r["score"] for r in rows], dtype=float)
     topks = np.array([r["mean_topk"] for r in rows], dtype=float)
@@ -390,6 +391,12 @@ def write_outputs(
     baseline_y_high = baseline_score_pct + baseline_score_std
     y_min = min(scores_pct.min(), baseline_y_low) - 0.45
     y_max = max(scores_pct.max(), baseline_y_high) + 0.45
+    if y_min_override is not None:
+        y_min = float(y_min_override)
+    if y_min >= y_max:
+        raise ValueError(
+            f"Invalid y-axis bounds: y_min ({y_min:.4f}) must be smaller than auto y_max ({y_max:.4f})."
+        )
     ax.set_xlim(x_min - 0.12 * x_span, x_max + 0.06 * x_span)
     ax.set_ylim(y_min, y_max)
 
@@ -543,6 +550,12 @@ def main():
     )
     ap.add_argument("--show_baseline_label", action="store_true", help="Show the baseline score label on the plot.")
     ap.add_argument("--baseline_score_std", type=float, default=0.0, help="Standard deviation or confidence interval width for baseline score (percentage points).")
+    ap.add_argument(
+        "--y_min",
+        type=float,
+        default=None,
+        help="Optional lower bound for y-axis (score percentage).",
+    )
     ap.add_argument("--out_json", type=str, default=None, help="Path to output pareto frontier json file.")
     ap.add_argument("--out_png", type=str, default=None, help="Path to output PNG file.")
     ap.add_argument("--out_pdf", type=str, default=None, help="Path to output PDF file.")
@@ -566,6 +579,7 @@ def main():
     baseline_score_pct = float(args.baseline_score)
     baseline_topk = float(args.baseline_topk)
     baseline_score_std = float(args.baseline_score_std)
+    y_min_override = None if args.y_min is None else float(args.y_min)
     fig_scale = float(args.fig_scale)
     if fig_scale <= 0:
         raise ValueError("--fig_scale must be > 0")
@@ -588,6 +602,7 @@ def main():
         out_pdf=out_pdf,
         legend_pdf=legend_pdf,
         baseline_score_std=baseline_score_std,
+        y_min_override=y_min_override,
     )
 
     if args.show_pareto:
