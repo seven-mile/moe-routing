@@ -31,6 +31,8 @@ run_case "$RESULT_DIR/optimization_results_lmeval_235b_0b6_gsm8k_cot.json" \
     --baseline_topk 8 \
     --legend_pdf "$LEGEND_PDF"
 
+exit 0
+
 run_case "$RESULT_DIR/optimization_results_lmeval_30b_0b6_gsm8k_cot.json" \
     --baseline_score 90.17 \
     --baseline_score_std 0.81 \

@@ -52,9 +52,9 @@ LINEWIDTH_MAP = {
 
 DISPLAY_LABEL_MAP = {
     'vanilla': 'Vanilla',
-    'baseline': 'Baseline',
-    'lossless': 'Lossless',
-    'optimum': 'Optimum',
+    'baseline': 'SpecDec Baseline',
+    'lossless': 'Spec-K Lossless',
+    'optimum': 'Spec-K Optimum',
 }
 
 # 统一视觉语义：提升现代感，同时维持论文可读性

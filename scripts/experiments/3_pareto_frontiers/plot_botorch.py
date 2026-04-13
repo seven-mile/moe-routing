@@ -187,7 +187,7 @@ def build_legend_figure():
             markerfacecolor="#9fb3c8",
             markeredgecolor="none",
             markersize=8,
-            label="Search space",
+            label="Policy",
         ),
         plt.Line2D([0], [0], color="#5b8def", linewidth=2.6, label="Pareto frontier"),
         plt.Line2D(
@@ -261,6 +261,7 @@ def write_outputs(
     legend_pdf=None,
     baseline_score_std=0.0,
     y_min_override=None,
+    font_scale=1.0,
 ):
     scores = np.array([r["score"] for r in rows], dtype=float)
     topks = np.array([r["mean_topk"] for r in rows], dtype=float)
@@ -299,7 +300,7 @@ def write_outputs(
 
     plt.rcParams.update(
         {
-            "font.size": 11,
+            "font.size": int(11 * font_scale),
             "axes.spines.top": False,
             "axes.spines.right": False,
             "axes.grid": True,
@@ -422,7 +423,7 @@ def write_outputs(
         marker_color="#b5bdc6",
         marker="D",
         s=82,
-        fontsize=10.5,
+        fontsize=int(10.5 * font_scale),
         ha="right",
         va="top",
         zorder=9,
@@ -462,7 +463,7 @@ def write_outputs(
             marker_color=lossless_color,
             marker="o",
             s=96,
-            fontsize=10.5,
+            fontsize=int(10.5 * font_scale),
             ha="left",
             va="top",
             zorder=10,
@@ -490,7 +491,7 @@ def write_outputs(
             marker_color=optimum_color,
             marker="o",
             s=96,
-            fontsize=10.5,
+            fontsize=int(10.5 * font_scale),
             ha="left",
             va="top",
             zorder=10,
@@ -502,7 +503,7 @@ def write_outputs(
             baseline_score_pct + 0.06,
             "Baseline score",
             color=baseline_color,
-            fontsize=10,
+            fontsize=int(10 * font_scale),
             ha="left",
             va="bottom",
         )
@@ -556,6 +557,12 @@ def main():
         default=None,
         help="Optional lower bound for y-axis (score percentage).",
     )
+    ap.add_argument(
+        "--font_scale",
+        type=float,
+        default=1.3,
+        help="Font size scaling factor (default 1.0, try 1.3-1.4 for slightly larger fonts).",
+    )
     ap.add_argument("--out_json", type=str, default=None, help="Path to output pareto frontier json file.")
     ap.add_argument("--out_png", type=str, default=None, help="Path to output PNG file.")
     ap.add_argument("--out_pdf", type=str, default=None, help="Path to output PDF file.")
@@ -580,6 +587,7 @@ def main():
     baseline_topk = float(args.baseline_topk)
     baseline_score_std = float(args.baseline_score_std)
     y_min_override = None if args.y_min is None else float(args.y_min)
+    font_scale = float(args.font_scale)
     fig_scale = float(args.fig_scale)
     if fig_scale <= 0:
         raise ValueError("--fig_scale must be > 0")
@@ -603,6 +611,7 @@ def main():
         legend_pdf=legend_pdf,
         baseline_score_std=baseline_score_std,
         y_min_override=y_min_override,
+        font_scale=font_scale,
     )
 
     if args.show_pareto:

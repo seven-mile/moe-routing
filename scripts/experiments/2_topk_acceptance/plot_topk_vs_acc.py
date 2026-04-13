@@ -69,11 +69,13 @@ def pick_special_point(rows, tag):
 
 
 def make_plot(rows, out_png: Path, out_pdf: Path):
+    legend_scale = 1.25
+
     plt.rcParams.update(
         {
             "font.size": 8.5,
             "axes.labelsize": 9.0,
-            "legend.fontsize": 6.8,
+            "legend.fontsize": 6.8 * legend_scale,
             "axes.spines.top": False,
             "axes.spines.right": False,
             "axes.grid": True,
@@ -155,7 +157,7 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
             markerfacecolor=bg_point_color,
             markeredgecolor="white",
             markeredgewidth=0.9,
-            markersize=6.8,
+            markersize=6.8 * legend_scale,
             label="Policy",
         ),
         plt.Line2D(
@@ -165,7 +167,7 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
             color="none",
             markerfacecolor="#b5bdc6",
             markeredgecolor="white",
-            markersize=5.8,
+            markersize=5.8 * legend_scale,
             label="Baseline",
         ),
         plt.Line2D(
@@ -175,7 +177,7 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
             color="none",
             markerfacecolor=lossless_color,
             markeredgecolor="white",
-            markersize=6.8,
+            markersize=6.8 * legend_scale,
             label="Lossless",
         ),
         plt.Line2D(
@@ -185,7 +187,7 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
             color="none",
             markerfacecolor=optimum_color,
             markeredgecolor="white",
-            markersize=6.8,
+            markersize=6.8 * legend_scale,
             label="Optimum",
         ),
     ]
@@ -198,10 +200,10 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
         frameon=True,
         fancybox=True,
         framealpha=0.92,
-        borderpad=0.35,
-        labelspacing=0.48,
-        handletextpad=0.45,
-        columnspacing=0.85,
+        borderpad=0.35 * legend_scale,
+        labelspacing=0.48 * legend_scale,
+        handletextpad=0.45 * legend_scale,
+        columnspacing=0.85 * legend_scale,
     )
 
     ax.set_xlabel("Mean Token Top-K")
