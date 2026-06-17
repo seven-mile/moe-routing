@@ -10,6 +10,11 @@ Options:
     --task TASK              Task name passed to lm_eval (default: gsm8k_cot)
     -c, --concurrency N      num_concurrent in model_args (default: 512)
     --formula JSON_ARRAY     Formula list, e.g. '[3.4, 2.1, 1.2]'
+    --constant-k K           Real constant top-k baseline for all generated target tokens
+    --naive-lower-layers N   Naive baseline: reduce first N MoE layers unconditionally
+    --naive-k K              Naive baseline target k for those lower layers
+    --policy-file PATH       Policy Python file path resolved by the server
+                             (default: configs/ppl_to_ks.py)
     --host HOST              Endpoint host (default: 127.0.0.1)
     --max-retries N          max_retries in model_args (default: 3)
     --show-config            Add --show_config to lm_eval (default: on)
@@ -22,6 +27,10 @@ Behavior:
     - other tasks use local-completions + /completions
     - If --formula is set: assisted_action.function=spec_with_list_layer_range
         assisted_action.args=[<formula>, [0, 0]]
+    - If --constant-k is set: assisted_action.function=constant_k.
+    - If --naive-lower-layers and --naive-k are set: use an equivalent
+        spec_with_list_layer_range config that ignores preview perplexity and
+        applies k to lower layers, while masking upper layers back to base k.
     - If --formula is not set: assisted_action.function=baseline (no args)
 
 Environment (defaults are applied if unset):
@@ -41,6 +50,10 @@ CONCURRENCY=512
 HOST="127.0.0.1"
 MAX_RETRIES=3
 FORMULA=""
+CONSTANT_K=""
+NAIVE_LOWER_LAYERS=""
+NAIVE_K=""
+POLICY_FILE="${POLICY_FILE:-configs/ppl_to_ks.py}"
 SHOW_CONFIG=1
 
 EXTRA_ARGS=()
@@ -77,6 +90,26 @@ while [[ $# -gt 0 ]]; do
             FORMULA="$2"
             shift 2
             ;;
+        --constant-k)
+            [[ $# -ge 2 ]] || die "--constant-k requires a value"
+            CONSTANT_K="$2"
+            shift 2
+            ;;
+        --naive-lower-layers)
+            [[ $# -ge 2 ]] || die "--naive-lower-layers requires a value"
+            NAIVE_LOWER_LAYERS="$2"
+            shift 2
+            ;;
+        --naive-k)
+            [[ $# -ge 2 ]] || die "--naive-k requires a value"
+            NAIVE_K="$2"
+            shift 2
+            ;;
+        --policy-file)
+            [[ $# -ge 2 ]] || die "--policy-file requires a value"
+            POLICY_FILE="$2"
+            shift 2
+            ;;
         --show-config)
             SHOW_CONFIG=1
             shift
@@ -104,6 +137,34 @@ done
 [[ "$PORT" =~ ^[0-9]+$ ]] || die "--port must be an integer"
 [[ "$CONCURRENCY" =~ ^[0-9]+$ ]] || die "--concurrency must be an integer"
 [[ "$MAX_RETRIES" =~ ^[0-9]+$ ]] || die "--max-retries must be an integer"
+if [[ -n "$CONSTANT_K" ]]; then
+    [[ -z "$FORMULA" ]] || die "--formula cannot be combined with --constant-k"
+    [[ -z "$NAIVE_LOWER_LAYERS" && -z "$NAIVE_K" ]] || die "--constant-k cannot be combined with naive baseline options"
+    [[ "$CONSTANT_K" =~ ^[0-9]+$ ]] || die "--constant-k must be an integer"
+    [[ "$CONSTANT_K" -le 8 ]] || die "--constant-k currently assumes base k=8 and must be <= 8"
+fi
+if [[ -n "$NAIVE_LOWER_LAYERS" || -n "$NAIVE_K" ]]; then
+    [[ -z "$FORMULA" ]] || die "--formula cannot be combined with naive baseline options"
+    [[ "$NAIVE_LOWER_LAYERS" =~ ^[0-9]+$ ]] || die "--naive-lower-layers must be an integer"
+    [[ "$NAIVE_K" =~ ^[0-9]+$ ]] || die "--naive-k must be an integer"
+    [[ "$NAIVE_K" -le 8 ]] || die "--naive-k currently assumes base k=8 and must be <= 8"
+fi
+
+make_naive_cfg() {
+    local k="$1"
+    local base_k=8
+    local vals=()
+    local i
+    for ((i = k; i < base_k; i++)); do
+        vals+=("1.0e30")
+    done
+    for ((i = 0; i < k; i++)); do
+        vals+=("0.0")
+    done
+    local joined
+    joined="$(IFS=,; echo "${vals[*]}")"
+    printf '[%s]' "$joined"
+}
 
 BASE_ENDPOINT="http://${HOST}:${PORT}/v1"
 MODELS_URL="${BASE_ENDPOINT}/models"
@@ -135,11 +196,35 @@ else
     EXTRA_MODEL_FIELDS=''
 fi
 
-if [[ -n "$FORMULA" ]]; then
+if [[ -n "$CONSTANT_K" ]]; then
+    ASSISTED_ACTION=$(cat <<EOF
+"assisted_action": {
+    "file": "${POLICY_FILE}",
+    "function": "constant_k",
+    "args": [
+        ${CONSTANT_K}
+    ]
+}
+EOF
+)
+elif [[ -n "$NAIVE_LOWER_LAYERS" ]]; then
+    NAIVE_CFG="$(make_naive_cfg "$NAIVE_K")"
+    ASSISTED_ACTION=$(cat <<EOF
+"assisted_action": {
+    "file": "${POLICY_FILE}",
+    "function": "spec_with_list_layer_range",
+    "args": [
+        ${NAIVE_CFG},
+        [${NAIVE_LOWER_LAYERS}, 1000]
+    ]
+}
+EOF
+)
+elif [[ -n "$FORMULA" ]]; then
     [[ "$FORMULA" =~ ^\[.*\]$ ]] || die "--formula must be a JSON array string, e.g. '[3.4, 2.1, 1.0]'"
     ASSISTED_ACTION=$(cat <<EOF
 "assisted_action": {
-    "file": "configs/ppl_to_ks.py",
+    "file": "${POLICY_FILE}",
     "function": "spec_with_list_layer_range",
     "args": [
         ${FORMULA},
@@ -149,9 +234,9 @@ if [[ -n "$FORMULA" ]]; then
 EOF
 )
 else
-    ASSISTED_ACTION=$(cat <<'EOF'
+    ASSISTED_ACTION=$(cat <<EOF
 "assisted_action": {
-    "file": "configs/ppl_to_ks.py",
+    "file": "${POLICY_FILE}",
     "function": "baseline"
 }
 EOF
@@ -179,6 +264,13 @@ export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 echo "[bench.sh] HF_DATASETS_OFFLINE=${HF_DATASETS_OFFLINE}"
 echo "[bench.sh] HF_ENDPOINT=${HF_ENDPOINT}"
 echo "[bench.sh] task=${TASK}, lm_model=${LM_MODEL}, base_url=${BASE_URL}, concurrency=${CONCURRENCY}"
+echo "[bench.sh] policy_file=${POLICY_FILE}"
+if [[ -n "$CONSTANT_K" ]]; then
+    echo "[bench.sh] constant_k=${CONSTANT_K}"
+fi
+if [[ -n "$NAIVE_LOWER_LAYERS" ]]; then
+    echo "[bench.sh] naive_lower_layers=${NAIVE_LOWER_LAYERS}, naive_k=${NAIVE_K}, encoded_cfg=${NAIVE_CFG}"
+fi
 # print formatted JSON by JQ
 echo "[bench.sh] model_args:"
 printf '%s' "$MODEL_ARGS" | jq .

@@ -224,6 +224,40 @@ def spec_with_list_layer_range(cfg: tuple[float], layer_range: tuple[int, ...], 
 
     return all
 
+def lower_layers_fixed_k(num_lower_layers: int, k: int, ppls, config):
+    """
+    Naive baseline for Spec-K preview-signal ablation.
+
+    It ignores draft-model perplexity and unconditionally uses k for the first
+    num_lower_layers MoE layers, while keeping the model's base k elsewhere.
+    """
+    num_layers = _get_num_moe_layers(config)
+    base_k = int(config.num_experts_per_tok)
+    num_lower_layers = max(0, min(int(num_lower_layers), num_layers))
+    k = max(0, min(int(k), base_k))
+
+    all_ks = torch.full(
+        (num_layers, ppls.numel()),
+        base_k,
+        dtype=torch.int64,
+        device=ppls.device,
+    )
+    if num_lower_layers > 0:
+        all_ks[:num_lower_layers] = k
+    return all_ks
+
+def lower_layers_fixed_k_spec_cfg(k: int, config):
+    """
+    Return a cfg list that makes spec_with_list_layer_range emit constant k.
+
+    vLLM's vectorized path computes k as count(ppl >= boundary). Since draft
+    perplexity is >= 1, k zero boundaries plus very large remaining boundaries
+    produce k for normal finite perplexities.
+    """
+    base_k = int(config.num_experts_per_tok)
+    k = max(0, min(int(k), base_k))
+    return [1.0e30] * (base_k - k) + [0.0] * k
+
 def constant_k(k: int, ppls, config):
     return torch.full_like(ppls, k, dtype=torch.int64)
 

@@ -13,6 +13,11 @@ Options:
     -l, --output-len N       sharegpt_output_len in vllm bench serve (default: 1024)
     -t, --tokenizer NAME     Tokenizer name (default: detected model id)
     -f, --formula JSON_ARRAY Formula list, e.g. '[2.0, 1.1]'
+    --constant-k K           Real constant top-k baseline for all generated target tokens
+    --naive-lower-layers N   Naive baseline: reduce first N MoE layers unconditionally
+    --naive-k K              Naive baseline target k for those lower layers
+    --policy-file PATH       Policy Python file path resolved by the server
+                             (default: configs/ppl_to_ks.py)
     -D, --dataset-name NAME  Dataset name (default: sharegpt)
     -h, --help               Show this help
 
@@ -21,6 +26,9 @@ Behavior:
     - If --tokenizer is not set, tokenizer defaults to the detected model id.
     - If --num-prompts is not set, it defaults to concurrency * 2.
     - If --formula is set, dyn-assisted-action-config uses spec_with_list_layer_range.
+    - If --constant-k is set, dyn-assisted-action-config uses constant_k.
+    - If --naive-lower-layers and --naive-k are set, use an equivalent
+      spec_with_list_layer_range config that ignores preview perplexity.
     - If --formula is not set, dyn-assisted-action-config uses baseline.
     - dataset-name=sharegpt resolves dataset-path from local hf cache scan output.
 
@@ -41,6 +49,10 @@ NUM_PROMPTS=""
 OUTPUT_LEN=1024
 TOKENIZER=""
 FORMULA=""
+CONSTANT_K=""
+NAIVE_LOWER_LAYERS=""
+NAIVE_K=""
+POLICY_FILE="${POLICY_FILE:-configs/ppl_to_ks.py}"
 DATASET_NAME="sharegpt"
 DATASET_PATH=""
 
@@ -83,6 +95,26 @@ while [[ $# -gt 0 ]]; do
             FORMULA="$2"
             shift 2
             ;;
+        --constant-k)
+            [[ $# -ge 2 ]] || die "--constant-k requires a value"
+            CONSTANT_K="$2"
+            shift 2
+            ;;
+        --naive-lower-layers)
+            [[ $# -ge 2 ]] || die "--naive-lower-layers requires a value"
+            NAIVE_LOWER_LAYERS="$2"
+            shift 2
+            ;;
+        --naive-k)
+            [[ $# -ge 2 ]] || die "--naive-k requires a value"
+            NAIVE_K="$2"
+            shift 2
+            ;;
+        --policy-file)
+            [[ $# -ge 2 ]] || die "--policy-file requires a value"
+            POLICY_FILE="$2"
+            shift 2
+            ;;
         -D|--dataset-name)
             [[ $# -ge 2 ]] || die "--dataset-name requires a value"
             DATASET_NAME="$2"
@@ -110,10 +142,38 @@ done
 if [[ -n "$NUM_PROMPTS" ]]; then
     [[ "$NUM_PROMPTS" =~ ^[0-9]+$ ]] || die "--num-prompts must be an integer"
 fi
+if [[ -n "$CONSTANT_K" ]]; then
+    [[ -z "$FORMULA" ]] || die "--formula cannot be combined with --constant-k"
+    [[ -z "$NAIVE_LOWER_LAYERS" && -z "$NAIVE_K" ]] || die "--constant-k cannot be combined with naive baseline options"
+    [[ "$CONSTANT_K" =~ ^[0-9]+$ ]] || die "--constant-k must be an integer"
+    [[ "$CONSTANT_K" -le 8 ]] || die "--constant-k currently assumes base k=8 and must be <= 8"
+fi
+if [[ -n "$NAIVE_LOWER_LAYERS" || -n "$NAIVE_K" ]]; then
+    [[ -z "$FORMULA" ]] || die "--formula cannot be combined with naive baseline options"
+    [[ "$NAIVE_LOWER_LAYERS" =~ ^[0-9]+$ ]] || die "--naive-lower-layers must be an integer"
+    [[ "$NAIVE_K" =~ ^[0-9]+$ ]] || die "--naive-k must be an integer"
+    [[ "$NAIVE_K" -le 8 ]] || die "--naive-k currently assumes base k=8 and must be <= 8"
+fi
 
 if [[ -z "$NUM_PROMPTS" ]]; then
     NUM_PROMPTS=$((CONCURRENCY * 2))
 fi
+
+make_naive_cfg() {
+    local k="$1"
+    local base_k=8
+    local vals=()
+    local i
+    for ((i = k; i < base_k; i++)); do
+        vals+=("1.0e30")
+    done
+    for ((i = 0; i < k; i++)); do
+        vals+=("0.0")
+    done
+    local joined
+    joined="$(IFS=,; echo "${vals[*]}")"
+    printf '[%s]' "$joined"
+}
 
 resolve_dataset_path() {
     local scan_output
@@ -190,11 +250,35 @@ fi
 echo "[bench_serve.sh] Detected model: ${MODEL_NAME}"
 echo "[bench_serve.sh] Using tokenizer: ${TOKENIZER}"
 
-if [[ -n "$FORMULA" ]]; then
+if [[ -n "$CONSTANT_K" ]]; then
+    DYN_ASSISTED_ACTION_CONFIG=$(cat <<EOF
+{
+    "file": "${POLICY_FILE}",
+    "function": "constant_k",
+    "args": [
+        ${CONSTANT_K}
+    ]
+}
+EOF
+)
+elif [[ -n "$NAIVE_LOWER_LAYERS" ]]; then
+    NAIVE_CFG="$(make_naive_cfg "$NAIVE_K")"
+    DYN_ASSISTED_ACTION_CONFIG=$(cat <<EOF
+{
+    "file": "${POLICY_FILE}",
+    "function": "spec_with_list_layer_range",
+    "args": [
+        ${NAIVE_CFG},
+        [${NAIVE_LOWER_LAYERS}, 1000]
+    ]
+}
+EOF
+)
+elif [[ -n "$FORMULA" ]]; then
     [[ "$FORMULA" =~ ^\[.*\]$ ]] || die "--formula must be a JSON array string, e.g. '[2.0, 1.1]'"
     DYN_ASSISTED_ACTION_CONFIG=$(cat <<EOF
 {
-    "file": "configs/ppl_to_ks.py",
+    "file": "${POLICY_FILE}",
     "function": "spec_with_list_layer_range",
     "args": [
         ${FORMULA},
@@ -204,9 +288,9 @@ if [[ -n "$FORMULA" ]]; then
 EOF
 )
 else
-    DYN_ASSISTED_ACTION_CONFIG=$(cat <<'EOF'
+    DYN_ASSISTED_ACTION_CONFIG=$(cat <<EOF
 {
-    "file": "configs/ppl_to_ks.py",
+    "file": "${POLICY_FILE}",
     "function": "baseline"
 }
 EOF
@@ -218,6 +302,13 @@ export TRANSFORMERS_OFFLINE="${TRANSFORMERS_OFFLINE:-1}"
 echo "[bench_serve.sh] TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE}"
 echo "[bench_serve.sh] host=${HOST}, port=${PORT}, concurrency=${CONCURRENCY}, num_prompts=${NUM_PROMPTS}, output_len=${OUTPUT_LEN}"
 echo "[bench_serve.sh] dataset_name=${DATASET_NAME}"
+echo "[bench_serve.sh] policy_file=${POLICY_FILE}"
+if [[ -n "$CONSTANT_K" ]]; then
+    echo "[bench_serve.sh] constant_k=${CONSTANT_K}"
+fi
+if [[ -n "$NAIVE_LOWER_LAYERS" ]]; then
+    echo "[bench_serve.sh] naive_lower_layers=${NAIVE_LOWER_LAYERS}, naive_k=${NAIVE_K}, encoded_cfg=${NAIVE_CFG}"
+fi
 echo "[bench_serve.sh] dataset_path=${DATASET_PATH}"
 echo "[bench_serve.sh] dyn_assisted_action_config:"
 printf '%s' "$DYN_ASSISTED_ACTION_CONFIG" | jq .
