@@ -196,6 +196,13 @@ resolve_dataset_path() {
         die "Neither hf nor huggingface-cli is available"
     fi
 
+    SHAREGPT_SNAPSHOT="192ab2185289094fc556ec8ce5ce1e8e587154ca"
+    SHAREGPT_FILE="ShareGPT_V3_unfiltered_cleaned_split.json"
+    local fallback_dataset_path="${HF_HOME:-$HOME/.cache/huggingface}/hub/datasets--anon8231489123--ShareGPT_Vicuna_unfiltered/snapshots/$SHAREGPT_SNAPSHOT/$SHAREGPT_FILE"
+    if [[ -z "$scan_output" && -f "$fallback_dataset_path" ]]; then
+        DATASET_PATH="$fallback_dataset_path"
+        return
+    fi
     [[ -n "$scan_output" ]] || die "HF cache scan returned no output"
 
     while IFS= read -r line; do
@@ -219,8 +226,6 @@ resolve_dataset_path() {
     [[ -n "$repo_cache_path" ]] || die "Could not find ShareGPT_Vicuna_unfiltered in HF cache"
     [[ -d "$repo_cache_path" ]] || die "Resolved HF repo path does not exist: $repo_cache_path"
 
-    SHAREGPT_SNAPSHOT="192ab2185289094fc556ec8ce5ce1e8e587154ca"
-    SHAREGPT_FILE="ShareGPT_V3_unfiltered_cleaned_split.json"
     DATASET_PATH="$repo_cache_path/snapshots/$SHAREGPT_SNAPSHOT/$SHAREGPT_FILE"
     [[ -f "$DATASET_PATH" ]] || die "Resolved sharegpt file not found: $DATASET_PATH"
 }
