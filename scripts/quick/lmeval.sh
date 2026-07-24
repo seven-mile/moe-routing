@@ -24,9 +24,9 @@ Behavior:
         assisted_action.args=[<formula>, [0, 0]]
     - If --formula is not set: assisted_action.function=baseline (no args)
 
-Environment (defaults are applied if unset):
+Environment:
     HF_DATASETS_OFFLINE=1
-    HF_ENDPOINT=https://hf-mirror.com
+    HF_ENDPOINT may be set to override the Hugging Face endpoint
 EOF
 }
 
@@ -174,10 +174,11 @@ EOF
 )
 
 export HF_DATASETS_OFFLINE="${HF_DATASETS_OFFLINE:-1}"
-export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
 
 echo "[bench.sh] HF_DATASETS_OFFLINE=${HF_DATASETS_OFFLINE}"
-echo "[bench.sh] HF_ENDPOINT=${HF_ENDPOINT}"
+if [[ -n "${HF_ENDPOINT:-}" ]]; then
+    echo "[bench.sh] HF_ENDPOINT=${HF_ENDPOINT}"
+fi
 echo "[bench.sh] task=${TASK}, lm_model=${LM_MODEL}, base_url=${BASE_URL}, concurrency=${CONCURRENCY}"
 # print formatted JSON by JQ
 echo "[bench.sh] model_args:"

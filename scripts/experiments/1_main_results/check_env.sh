@@ -93,6 +93,9 @@ if [[ $SOURCE_ONLY == true ]]; then
     exit 0
 fi
 
+# Avoid importing the top-level submodule directories as namespace packages.
+cd /tmp
+
 for command_name in uv python nvcc nvidia-smi; do
     if command -v "$command_name" >/dev/null 2>&1; then
         pass "$command_name is available"
@@ -102,10 +105,12 @@ for command_name in uv python nvcc nvidia-smi; do
 done
 
 uv_version=$(uv --version 2>/dev/null | awk '{print $2}' || true)
-if [[ $uv_version == 0.11.21 ]]; then
-    pass "uv version is 0.11.21"
+IFS=. read -r uv_major uv_minor uv_patch <<< "$uv_version"
+if [[ $uv_major == 0 && $uv_minor == 11 && $uv_patch =~ ^[0-9]+$ ]] \
+        && (( uv_patch >= 21 )); then
+    pass "uv version $uv_version is in the supported range"
 else
-    fail "uv version is ${uv_version:-unavailable}, expected 0.11.21"
+    fail "uv version is ${uv_version:-unavailable}, expected >=0.11.21,<0.12"
 fi
 
 python_version=$(python -c 'import sys; print(".".join(map(str, sys.version_info[:2])))' 2>/dev/null || true)
@@ -115,28 +120,39 @@ else
     fail "Python version is ${python_version:-unavailable}, expected 3.12"
 fi
 
+NVSHMEM_PACKAGE_DIR=$(
+    python - <<'PY' 2>/dev/null || true
+import importlib.util
+
+spec = importlib.util.find_spec("nvidia.nvshmem")
+if spec is not None and spec.submodule_search_locations:
+    print(spec.submodule_search_locations[0])
+PY
+)
 NVSHMEM_LIB_DIR=
-if [[ -z ${NVSHMEM_DIR:-} ]]; then
-    fail "NVSHMEM_DIR is not set"
+if [[ -z $NVSHMEM_PACKAGE_DIR || ! -d $NVSHMEM_PACKAGE_DIR ]]; then
+    fail "nvidia.nvshmem package is unavailable"
 else
-    NVSHMEM_LIB_DIR="$NVSHMEM_DIR/lib"
-    if [[ -f $NVSHMEM_DIR/include/nvshmem.h ]]; then
-        pass "NVSHMEM headers found in $NVSHMEM_DIR"
+    NVSHMEM_LIB_DIR="$NVSHMEM_PACKAGE_DIR/lib"
+    if [[ -f $NVSHMEM_PACKAGE_DIR/include/nvshmem.h ]]; then
+        pass "NVSHMEM headers found in $NVSHMEM_PACKAGE_DIR"
     else
-        fail "missing $NVSHMEM_DIR/include/nvshmem.h"
+        fail "missing $NVSHMEM_PACKAGE_DIR/include/nvshmem.h"
     fi
-    if [[ -f $NVSHMEM_DIR/lib/libnvshmem_device.a ]]; then
+    if [[ -f $NVSHMEM_LIB_DIR/libnvshmem_device.a ]]; then
         pass "NVSHMEM device library found"
     else
-        fail "missing $NVSHMEM_DIR/lib/libnvshmem_device.a"
+        fail "missing $NVSHMEM_LIB_DIR/libnvshmem_device.a"
     fi
-    if [[ -e $NVSHMEM_DIR/lib/libnvshmem_host.so ]]; then
-        pass "unversioned NVSHMEM host library found"
+    nvshmem_host_lib=$(find -L "$NVSHMEM_LIB_DIR" -maxdepth 1 -type f \
+        -name 'libnvshmem_host.so.*' -print -quit 2>/dev/null || true)
+    if [[ -n $nvshmem_host_lib ]]; then
+        pass "versioned NVSHMEM host library found"
     else
-        fail "missing $NVSHMEM_DIR/lib/libnvshmem_host.so required at link time"
+        fail "versioned NVSHMEM host library is missing"
     fi
 
-    ibgda_plugin=$(find -L "$NVSHMEM_DIR/lib" -maxdepth 1 -type f \
+    ibgda_plugin=$(find -L "$NVSHMEM_LIB_DIR" -maxdepth 1 -type f \
         -name 'nvshmem_transport_ibgda.so*' -print -quit 2>/dev/null || true)
     if [[ -z $ibgda_plugin ]]; then
         fail "NVSHMEM IBGDA transport plugin is missing"
@@ -154,9 +170,9 @@ fi
 if python - "$WITH_PPLX" <<'PY' >/dev/null 2>&1
 import sys
 
+import torch
 import deep_ep
 import flash_attn
-import torch
 import transformers
 import vllm
 
@@ -196,6 +212,7 @@ for name, (actual, expected_root) in expected_paths.items():
 expected_versions = {
     "torch": "2.9.1",
     "flash-attn": "2.8.3",
+    "nvidia-nvshmem-cu12": "3.3.20",
     "transformers": "4.57.0.dev0",
 }
 if sys.argv[2] == "true":
@@ -211,7 +228,14 @@ if "e0fbd6612" not in vllm.__version__:
 print(f"python={sys.executable}")
 for name, (actual, _) in expected_paths.items():
     print(f"{name}={actual}")
-reported = ["torch", "flash-attn", "transformers", "deep-ep", "vllm"]
+reported = [
+    "torch",
+    "flash-attn",
+    "nvidia-nvshmem-cu12",
+    "transformers",
+    "deep-ep",
+    "vllm",
+]
 if sys.argv[2] == "true":
     reported.append("pplx-kernels")
 for name in reported:
@@ -234,15 +258,15 @@ else
 fi
 
 deep_ep_extension=$(
-    python -c 'import deep_ep_cpp; print(deep_ep_cpp.__file__)' 2>/dev/null || true
+    python -c 'import torch; import deep_ep_cpp; print(deep_ep_cpp.__file__)' \
+        2>/dev/null || true
 )
 if [[ -n $deep_ep_extension && -f $deep_ep_extension ]]; then
     pass "DeepEP extension found at $deep_ep_extension"
     deep_ep_ldd=$(ldd "$deep_ep_extension" 2>&1 || true)
-    if [[ -z $NVSHMEM_LIB_DIR ]]; then
-        fail "cannot verify DeepEP NVSHMEM resolution without NVSHMEM_DIR"
-    elif grep -Fq "$NVSHMEM_LIB_DIR" <<< "$deep_ep_ldd"; then
-        pass "DeepEP resolves NVSHMEM from NVSHMEM_DIR"
+    if [[ -n $NVSHMEM_LIB_DIR ]] \
+            && grep -Fq "$NVSHMEM_LIB_DIR" <<< "$deep_ep_ldd"; then
+        pass "DeepEP resolves NVSHMEM from the locked Python package"
     else
         fail "DeepEP does not resolve NVSHMEM from $NVSHMEM_LIB_DIR"
         echo "$deep_ep_ldd" >&2
@@ -284,22 +308,4 @@ if command -v nvcc >/dev/null 2>&1; then
         fail "CUDA toolkit is not 12.8"
     fi
 fi
-NVSHMEM_INFO_BIN=
-if [[ -n ${NVSHMEM_DIR:-} && -x $NVSHMEM_DIR/bin/nvshmem-info ]]; then
-    NVSHMEM_INFO_BIN=$NVSHMEM_DIR/bin/nvshmem-info
-elif command -v nvshmem-info >/dev/null 2>&1; then
-    NVSHMEM_INFO_BIN=$(command -v nvshmem-info)
-fi
-if [[ -n $NVSHMEM_INFO_BIN ]]; then
-    nvshmem_output=$($NVSHMEM_INFO_BIN -a 2>&1)
-    echo "$nvshmem_output"
-    if grep -qE '3\.4\.5' <<< "$nvshmem_output"; then
-        pass "NVSHMEM reports version 3.4.5"
-    else
-        fail "nvshmem-info does not report version 3.4.5"
-    fi
-else
-    fail "nvshmem-info is unavailable under NVSHMEM_DIR or PATH"
-fi
-
 (( failures == 0 )) || exit 1

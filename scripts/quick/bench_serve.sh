@@ -145,7 +145,7 @@ resolve_dataset_path() {
 
         # hf cache scan is a human-readable table. Parse by columns:
         # repo=id (col1), type=dataset/model/space (col2), path=last col.
-        cleaned="${line%${line##*[![:space:]]}}"
+        cleaned="${line%"${line##*[![:space:]]}"}"
         repo="$(printf '%s\n' "$cleaned" | awk '{print $1}')"
         repo_type="$(printf '%s\n' "$cleaned" | awk '{print $2}')"
         local_path="$(printf '%s\n' "$cleaned" | awk '{print $NF}')"

@@ -34,11 +34,25 @@ if [[ -n $EXPECTED_COMMIT ]]; then
 fi
 "$SCRIPT_DIR/check_env.sh" "${SOURCE_ARGS[@]}"
 
-"$SCRIPT_DIR/prepare_nvshmem.sh" \
-    --prefix "$TMP_ROOT/nvshmem-3.4.5" --dry-run
-NVSHMEM_DIR="$TMP_ROOT/nvshmem-3.4.5" \
+PRECOMPILED_DRY_RUN=$(
     "$SCRIPT_DIR/bootstrap_env.sh" \
-    --venv "$TMP_ROOT/venv" --dry-run
+        --venv "$TMP_ROOT/venv" --dry-run
+)
+printf '%s\n' "$PRECOMPILED_DRY_RUN"
+grep -qF 'env -u NVSHMEM_DIR' <<< "$PRECOMPILED_DRY_RUN"
+grep -qF 'VLLM_USE_PRECOMPILED=1' <<< "$PRECOMPILED_DRY_RUN"
+grep -qF \
+    'VLLM_PRECOMPILED_WHEEL_COMMIT=89a77b10846fd96273cce78d86d2556ea582d26e' \
+    <<< "$PRECOMPILED_DRY_RUN"
+grep -qF 'VLLM_PRECOMPILED_WHEEL_VARIANT=cu129' <<< "$PRECOMPILED_DRY_RUN"
+SOURCE_BUILD_DRY_RUN=$(
+    "$SCRIPT_DIR/bootstrap_env.sh" \
+        --venv "$TMP_ROOT/source-build-venv" --build-vllm-from-source --dry-run
+)
+if grep -qF 'VLLM_USE_PRECOMPILED' <<< "$SOURCE_BUILD_DRY_RUN"; then
+    echo "[preflight.sh] ERROR: source vLLM build enables precompiled extensions" >&2
+    exit 1
+fi
 "$SCRIPT_DIR/prepare_inputs.sh" \
     --root "$TMP_ROOT/inputs" --with-models --dry-run
 

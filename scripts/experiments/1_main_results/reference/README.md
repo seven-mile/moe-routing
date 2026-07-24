@@ -1,15 +1,14 @@
-# Archived EP8 analysis input
+# EP8 analysis fixture
 
-`30b_ep8.csv` is the time-bounded AE input for checking the result summarizer,
-strict request-count protocol, and plotting path without rerunning the H20
-experiment.
+`30b_ep8.csv` exercises the result summarizer, strict request-count protocol,
+and plotting path without requiring a serving run.
 
 It contains all 15 rows from the original parsed 30B EP8 result: three policy
 modes at five concurrency levels. The retained columns are exactly those read
 by `summarize_results.py` and `plot_main_res.py`; values were selected without
 aggregation or recomputation.
 
-Source in the authors' experiment archive:
+Source file and digest:
 
 ```text
 data/plot/1_main_res/30b_ep8.csv
@@ -18,5 +17,4 @@ size   4654 bytes
 ```
 
 The source measurements were collected on the paper's H20 system. Running the
-analysis commands on this CSV validates the published analysis code and data
-protocol; it does not reproduce the serving measurements.
+analysis commands on this CSV validates the analysis code and data protocol.
