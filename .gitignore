@@ -9,8 +9,18 @@ wheels/
 # Virtual environments
 .venv
 
+# Local agent/project notes
+.codex/
+
+# Local AE downloads and native dependencies
+.ae-inputs/
+.deps/
+
 # Binary assets
 data/
 
 # Logs
 logs/
+
+# Generated AE reference-analysis outputs
+scripts/experiments/1_main_results/reference/generated/

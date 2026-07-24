@@ -1,120 +1,141 @@
 #!/usr/bin/env python3
-import sys
-import re
-import json
-import csv
 import argparse
+import csv
+import json
+import re
+import sys
 from pathlib import Path
-from collections import Counter
+from typing import TextIO
 
-def parse_log(file_path):
+
+RESULT_BLOCK_RE = re.compile(
+    r"^=+\s+Serving Benchmark Result\s+=+\s*$\n"
+    r"(?P<body>.*?)(?=^=+\s*$)",
+    re.DOTALL | re.MULTILINE,
+)
+RUN_NAME_RE = re.compile(
+    r"(?P<mode>baseline|lossless|optimum)_c(?P<concurrency>\d+)\.log$"
+)
+
+
+def parse_log(file_path: Path):
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-    except Exception as e:
-        return None, f"Read Error: {str(e)}"
+        content = file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"Read error: {exc}"
 
-    # 定位 Benchmark 区块
-    pattern = r"============ Serving Benchmark Result ============(.*?)=================================================="
-    block_match = re.search(pattern, content, re.DOTALL)
-    
+    block_match = RESULT_BLOCK_RE.search(content)
     if not block_match:
-        return None, "Format Error: Could not find benchmark result block."
+        return None, "Format error: benchmark result block not found"
 
-    block = block_match.group(1)
     data = {"filename": str(file_path)}
-    
-    lines = block.strip().split('\n')
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith('-'): continue
-        
-        # 处理 Per-position acceptance 列表
-        pos_match = re.match(r"Position (\d+):\s+([\d.]+)", line)
-        if pos_match:
-            data[f"Pos_{pos_match.group(1)}_Acceptance(%)"] = pos_match.group(2)
+    run_match = RUN_NAME_RE.search(file_path.name)
+    if run_match:
+        data["mode"] = run_match.group("mode")
+        data["Configured concurrency"] = run_match.group("concurrency")
+
+    for raw_line in block_match.group("body").strip().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("-"):
             continue
 
-        # 解析 Key: Value
-        if ':' in line:
-            parts = line.split(':', 1)
-            key = parts[0].strip()
-            val = parts[1].strip()
-            if val:
-                data[key] = val
-        else:
-            # 处理没有冒号但有固定间距的情况
-            parts = re.split(r'\s{2,}', line)
-            if len(parts) >= 2:
-                data[parts[0].strip()] = parts[1].strip()
+        position_match = re.match(r"Position (\d+):\s+([\d.]+)", line)
+        if position_match:
+            data[f"Pos_{position_match.group(1)}_Acceptance(%)"] = (
+                position_match.group(2)
+            )
+            continue
+
+        if ":" in line:
+            key, value = (part.strip() for part in line.split(":", 1))
+            if value:
+                data[key] = value
+            continue
+
+        parts = re.split(r"\s{2,}", line)
+        if len(parts) >= 2:
+            data[parts[0].strip()] = parts[1].strip()
 
     return data, None
 
+
+def write_results(results, output_format: str, output: TextIO):
+    if output_format == "json":
+        json.dump(results, output, indent=2)
+        output.write("\n")
+        return
+
+    all_keys = set().union(*(result.keys() for result in results))
+    preferred = ["filename", "mode", "Configured concurrency"]
+    fieldnames = [key for key in preferred if key in all_keys]
+    fieldnames.extend(sorted(all_keys - set(fieldnames)))
+
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(results)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Collect Benchmark Data")
-    parser.add_argument("files", nargs='+', help="Log files to parse")
-    parser.add_argument("--format", choices=['csv', 'json'], default='csv', help="Output format")
+    parser = argparse.ArgumentParser(description="Collect vLLM serving benchmark data")
+    parser.add_argument("files", nargs="+", type=Path, help="Benchmark logs to parse")
+    parser.add_argument(
+        "--format", choices=("csv", "json"), default="csv", help="Output format"
+    )
+    parser.add_argument(
+        "--output", type=Path, help="Write results to this file instead of stdout"
+    )
+    parser.add_argument(
+        "--fail-on-error",
+        action="store_true",
+        help="Return nonzero if any requested log cannot be parsed",
+    )
     args = parser.parse_args()
 
     results = []
     errors = []
     all_keys = set()
-
-    # 第一轮解析：收集数据和所有的列名
-    for f_path in args.files:
-        res, err = parse_log(f_path)
-        if err:
-            errors.append((f_path, err))
-        else:
-            results.append(res)
-            all_keys.update(res.keys())
+    for file_path in args.files:
+        result, error = parse_log(file_path)
+        if error:
+            errors.append((file_path, error))
+            continue
+        results.append(result)
+        all_keys.update(result.keys())
 
     if not results:
-        print(f"Error: No valid data extracted from {len(args.files)} files.", file=sys.stderr)
-        if errors:
-            print("\nErrors encountered:", file=sys.stderr)
-            for f, e in errors: print(f"  [{f}]: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Error: no valid data extracted from {len(args.files)} files", file=sys.stderr)
+        for file_path, error in errors:
+            print(f"  [{file_path}]: {error}", file=sys.stderr)
+        raise SystemExit(1)
 
-    # 第二轮：检查字段缺失 (Warnings)
     warnings = []
-    for res in results:
-        missing = all_keys - set(res.keys())
+    for result in results:
+        missing = all_keys - set(result.keys())
         if missing:
-            warnings.append((res['filename'], missing))
+            warnings.append((result["filename"], sorted(missing)))
 
-    # 输出主数据到 stdout
-    if args.format == 'json':
-        print(json.dumps(results, indent=4))
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with args.output.open("w", encoding="utf-8", newline="") as output:
+            write_results(results, args.format, output)
     else:
-        fieldnames = sorted(list(all_keys))
-        # 确保 filename 始终在第一列
-        if "filename" in fieldnames:
-            fieldnames.insert(0, fieldnames.pop(fieldnames.index("filename")))
-        
-        writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in results:
-            writer.writerow(r)
+        write_results(results, args.format, sys.stdout)
 
-    # 输出报告到 stderr (不会被重定向到文件)
-    print("\n" + "="*30, file=sys.stderr)
+    print("\n" + "=" * 30, file=sys.stderr)
     print("ANALYSIS SUMMARY", file=sys.stderr)
-    print("="*30, file=sys.stderr)
+    print("=" * 30, file=sys.stderr)
     print(f"Total files processed: {len(args.files)}", file=sys.stderr)
     print(f"Successful:            {len(results)}", file=sys.stderr)
     print(f"Failed:                {len(errors)}", file=sys.stderr)
+    for file_path, error in errors:
+        print(f"  ERROR {file_path}: {error}", file=sys.stderr)
+    for filename, missing in warnings:
+        print(f"  WARNING {filename}: missing {missing}", file=sys.stderr)
+    print("=" * 30, file=sys.stderr)
 
-    if errors:
-        print("\n[ERRORS]", file=sys.stderr)
-        for f, e in errors:
-            print(f"  - {f}: {e}", file=sys.stderr)
+    if args.fail_on_error and errors:
+        raise SystemExit(2)
 
-    if warnings:
-        print("\n[WARNINGS - Missing Fields]", file=sys.stderr)
-        for f, m in warnings:
-            print(f"  - {f}: missing {list(m)}", file=sys.stderr)
-    print("="*30, file=sys.stderr)
 
 if __name__ == "__main__":
     main()

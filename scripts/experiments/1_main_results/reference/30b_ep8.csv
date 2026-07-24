@@ -1,0 +1,16 @@
+filename,Maximum request concurrency,Mean TPOT (ms),Output token throughput (tok/s),Failed requests,Successful requests
+baseline_c64.log,64,35.77,1570.22,0,256
+baseline_c128.log,128,42.63,2445.74,0,512
+baseline_c256.log,256,58.22,3946.61,0,1024
+baseline_c512.log,512,95.57,4956.09,0,2048
+baseline_c1024.log,1024,173.59,5512.18,0,4096
+lossless_c64.log,64,34.56,1626.98,0,256
+lossless_c128.log,128,37.49,3009.69,0,512
+lossless_c256.log,256,49.02,4649.47,0,1024
+lossless_c512.log,512,80.34,5815.80,0,2048
+lossless_c1024.log,1024,136.14,6972.14,0,4096
+optimum_c64.log,64,33.23,1668.67,0,256
+optimum_c128.log,128,35.85,3081.34,0,512
+optimum_c256.log,256,45.68,4926.77,0,1024
+optimum_c512.log,512,71.45,6487.78,0,2048
+optimum_c1024.log,1024,119.49,7923.74,0,4096
