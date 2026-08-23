@@ -73,6 +73,8 @@ def make_plot(rows, out_png: Path, out_pdf: Path):
 
     plt.rcParams.update(
         {
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
             "font.size": 8.5,
             "axes.labelsize": 9.0,
             "legend.fontsize": 6.8 * legend_scale,
