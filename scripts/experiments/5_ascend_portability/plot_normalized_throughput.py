@@ -39,7 +39,7 @@ def main() -> None:
         width,
         color="#000000",
         alpha=0.78,
-        label="SpecDec Baseline",
+        label="SpecDecode",
         zorder=3,
     )
     ax.bar(

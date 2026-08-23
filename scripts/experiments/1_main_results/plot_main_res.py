@@ -54,7 +54,7 @@ LINEWIDTH_MAP = {
 
 DISPLAY_LABEL_MAP = {
     'vanilla': 'Vanilla',
-    'baseline': 'SpecDec Baseline',
+    'baseline': 'SpecDecode',
     'lossless': 'Spec-K Lossless',
     'optimum': 'Spec-K Optimum',
 }
