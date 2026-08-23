@@ -593,8 +593,7 @@ This suggests that Spec-K not only improves single-node efficiency, but also mit
     }
 
     \caption{Latency breakdown of the verification step for SpecDecode and Spec-K (Optimum policy).
-Spec-K reduces latency across all major components, including computation (GroupGEMM) and communication (Dispatch and Combine).
-The reduction closely follows the decrease in routing budget, with additional gains from improved kernel efficiency.}
+Spec-K reduces total latency in both settings: GroupGEMM and Combine decrease in both cases, while Dispatch decreases in the inter-node EP-32 case and remains effectively unchanged in the intra-node EP-8 case.}
     \label{fig:overall_latency_breakdown}
 \end{figure}
 
@@ -623,9 +622,24 @@ To understand the source of the end-to-end speedup, we analyze the latency of th
 
 We profile the decoding of 32 tokens under offline inference with simultaneous request issuance to minimize scheduling effects. Two representative settings are considered: (1) Qwen3-30B-A3B with EP=8 at global batch size 1024 (intra-node), and (2) Qwen3-235B-A22B with EP=32 at global batch size 2048 (inter-node).
 
-Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K consistently reduces latency across all major components. GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
+Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
-Communication overhead is also reduced. Dispatch latency closely follows the reduction in routing volume, while Combine latency improves more moderately. Notably, Combine latency substantially exceeds Dispatch latency in both settings, primarily due to inter-GPU synchronization, reflecting the overhead induced by load imbalance in MoE computation. The observed reduction in Combine latency indicates that Spec-K does not degrade EP load balance.
+Communication behavior depends on the deployment regime. In the inter-node EP-32 case, Dispatch latency falls with routing volume; in the intra-node EP-8 case it is effectively unchanged. Combine latency decreases in both settings but remains substantial because it includes inter-device synchronization and therefore reflects load imbalance in MoE computation.
+Table~\ref{tab:assignment_load} separates bottleneck work from relative imbalance in an EP-32 GSM8K sweep. Busiest-device work is relative to SpecDecode; imbalance is the maximum-to-mean device load after normalizing assignment counts by target-model decode layer positions. Although this imbalance rises modestly from $1.47\times$ to $1.55\times$, busiest-device work falls to $0.68\times$ and $0.59\times$ for Lossless and Optimum, respectively, consistent with lower Combine latency.
+
+\begin{table}[t]
+\caption{EP-32 busiest-device work and load imbalance.}
+\label{tab:assignment_load}
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric} & \textbf{Baseline} & \textbf{Lossless} & \textbf{Optimum} \\
+\midrule
+Busiest-device work & $1.00\times$ & $0.68\times$ & $0.59\times$ \\
+Imbalance (max/mean) & $1.47\times$ & $1.55\times$ & $1.55\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Overall, the components accelerated by Spec-K account for 80--90\% of the total verification latency, indicating that the method directly targets the dominant bottlenecks in the system. 
 These results demonstrate that routing sparsity introduced by Spec-K translates effectively into both computation and communication savings at the system level.
@@ -655,6 +669,12 @@ This effect is complementary to system-level optimizations: while reduced routin
 Together, these factors contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
 
 \subsection{Quality--Efficiency Tradeoff and Generalization}
+
+\subsubsection{Comparison with Allocation Baselines}
+
+To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant routing budget and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+
+For cross-system context, Lynx~\cite{gupta2024lynx} reports $1.14\times$ lower median time per output token on Qwen3-30B-A3B-Instruct with GSM8K, with exact-match accuracy decreasing from 88.4\% to 87.6\%. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
 
 \subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
@@ -711,7 +731,7 @@ Limited routing redundancy for $k=4$
         \includegraphics[width=0.31\textwidth]{pareto/glm47flash_mtp_gsm8k_cot.pdf}
     }
 
-    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline.
+    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline; the three gold crosses in (a) mark fixed lower-layer controls.
 All settings exhibit a consistent tradeoff structure: a plateau region with negligible quality loss followed by a sharp degradation beyond a critical routing threshold.
 Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
     \label{fig:frontiers}
@@ -777,6 +797,7 @@ This suggests that policies calibrated on reasoning tasks may be slightly over-a
 We attribute this behavior to differences in decoding phases. 
 Reasoning tasks involve a ``thinking'' phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained ``answering'' phase with lower tolerance for errors.
 These differences imply that phase-aware allocation policies may further improve performance in practice.
+A serving system can realize this by selecting an offline-calibrated policy for the request's generation regime.
 
 Overall, these results show that routing policies learned from a single task transfer well across related workloads, while leaving room for further gains through phase-specific adaptation.
 
@@ -822,13 +843,13 @@ Adaptive inference dynamically adjusts computation based on input difficulty.
 Prior work spans both training-based and training-free approaches.
 
 Training-based methods incorporate adaptivity into the model, including early exiting (e.g., BranchyNet~\cite{teerapittayanon2016branchynet}, DeeBERT~\cite{xin2020deebert}), token pruning~\cite{rao2021dynamicvit}, sparse attention~\cite{yuan2025native}, and learned MoE routing behaviors~\cite{zhou2022mixture,huang2024harder,jin2024moe++}. 
-These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes.
+In particular, Harder Tasks Need More Experts~\cite{huang2024harder} trains a confidence-based router with a dynamic sparsity objective. These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes. In contrast, Spec-K adapts pretrained MoE models using a pre-execution draft signal.
 
 Training-free methods adapt computation at inference time. 
-Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while MoE-specific methods such as Lynx~\cite{gupta2024lynx} prune experts based on routing confidence. 
+Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while Lynx~\cite{gupta2024lynx} uses target-side router scores to remap low-affinity token--expert assignments onto a smaller batch-level active-expert set while preserving the model's per-token Top-$k$.
 These approaches typically rely on signals observed during execution and operate at token-, block-, or batch-level.
 
-In contrast, our method performs \emph{pre-execution} adaptation using preview signals, enabling token-level resource allocation before the target forward pass, suggesting a new paradigm for guiding adaptive inference.
+In contrast, Spec-K uses a draft signal available before target execution to vary each token's routing budget, reducing token--expert assignments themselves rather than only their batch-level union.
 
 \section{Discussion and Conclusion}
 
