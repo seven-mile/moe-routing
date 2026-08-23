@@ -9,8 +9,12 @@ wheels/
 # Virtual environments
 .venv
 
+# Local agent/project notes
+.codex/
+
 # Binary assets
 data/
+*.pdf
 
 # Logs
 logs/
