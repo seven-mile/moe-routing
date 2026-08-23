@@ -98,7 +98,7 @@ This abstraction decouples preview generation from policy design, enabling flexi
 
 Based on this principle, we introduce \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive inference. 
 RASP decomposes the inference process into three components: (1) a \emph{preview signal} that estimates token difficulty, (2) a \emph{allocation policy} that maps this signal to a resource allocation plan, and (3) the \emph{adaptive target model execution} that realizes the allocation with speedup. 
-Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free and zero-overhead adaptation.
+Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling lightweight, training-free adaptation.
 This abstraction enables fine-grained, online adjustment of compute budgets, allowing systems to allocate more resources to difficult tokens while reducing waste on easy ones. 
 Beyond MoE routing, the framework naturally extends to other forms of adaptive computation, such as sparse attention or layer skipping.
 
@@ -426,19 +426,21 @@ We demonstrate the practicality of Spec-K by describing its integration into exi
 
 \subsection{Integration Scope}
 
-To validate the generality of our approach, we implement Spec-K across four representative frameworks spanning research prototypes and production serving systems: HuggingFace Transformers with assisted generation~\cite{gante2023assistedgeneration}, Eagle~\cite{li2024eagle}, vLLM~\cite{kwon2023efficient}, and vLLM-Ascend~\cite{huawei2024vllmascend}. 
+To validate the generality of our approach, we implement Spec-K across four representative frameworks spanning research prototypes and production serving systems: HuggingFace Transformers with assisted generation~\cite{gante2023assistedgeneration}, EAGLE~\cite{li2024eagle}, vLLM~\cite{kwon2023efficient}, and vLLM-Ascend~\cite{huawei2024vllmascend}.
 
 A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
 
-% \subsection{Vectorized Policy Execution}
+Our primary vLLM implementation uses draft-distribution entropy from Eq.~(\ref{eq:preview-signal}) and retains base-Top-$k$-normalized routing weights after masking. The HuggingFace integration uses proposed-token perplexity, $1/p_i(S_i)$, and renormalizes the retained weights after masking. Both supply a token-wise preview signal to the same allocation-policy interface.
 
-% In serving systems that employ continuous batching~\cite{yu2022orca}, allocation policies must be computed per request. A naïve implementation would launch a separate kernel for each request's piecewise policy evaluation, incurring significant kernel launch overhead and potential host--device synchronization stalls. To eliminate this overhead from the critical path, we fuse the entire policy computation into a single Triton~\cite{tillet2019triton} kernel that operates over all tokens in the batch concurrently. With this vectorized implementation, policy calculation accounts for less than $0.1\%$ of total execution time in typical deployment configurations.
+\subsection{Vectorized Policy Execution}
+
+Continuous batching may combine requests using different policies. We fuse draft-distribution entropy, per-request threshold lookup, and token-wise Top-$k$ budget assignment into a single Triton~\cite{tillet2019triton} kernel over all candidate tokens in the batch, providing batched device-side policy evaluation with minimal overhead.
 
 \subsection{Adaptive Kernel Support}
 
-Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert, and we observe no significant degradation in load balance under Spec-K's adaptive routing budgets.
+Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert, allowing the reduced assignment volume to translate into lower computation.
 
-The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. When routing budgets vary across tokens under Spec-K, this fixed partitioning leads to warp-level imbalance. We augment the workload partitioning with adaptive rebalancing that accounts for per-token budget variations. Microbenchmarks confirm that this adjustment brings observed communication latency into closer alignment with the theoretical reduction in communication volume.
+The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. Under dynamic routing budgets, this leaves warps assigned to masked positions idle. We instead partition work according to the actual number of active assignments, allowing the communication kernel to exploit the reduced routing budget.
 
 \section{Evaluation} \label{sec:evaluation}
 
@@ -830,7 +832,7 @@ In contrast, our method performs \emph{pre-execution} adaptation using preview s
 
 \section{Discussion and Conclusion}
 
-Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or incurring overhead.
+Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals and with minimal policy overhead.
 
 Our results point to a consistent phenomenon: reducing the routing budget can improve both efficiency and speculative acceptance. This suggests that MoE inference operates in a regime of \emph{excess capacity but imperfect utilization}, where activating more experts does not necessarily improve draft--target alignment. Instead, adaptive sparsification acts as an implicit regularizer, suppressing low-contribution experts and yielding more consistent predictions. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial redundancy for typical tokens, while a small subset of difficult tokens defines the capacity boundary. Spec-K exploits this asymmetry by reallocating resources toward high-uncertainty regions.
 
