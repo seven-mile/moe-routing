@@ -141,7 +141,7 @@ In distributed inference, MoE layers are typically executed under an expert-para
 \begin{itemize}
     \item \textbf{Routing}: compute gating scores and select Top-$k$ experts for each token.
     \item \textbf{Dispatch}: send token representations to the devices hosting the selected experts.
-    \item \textbf{Expert Computation}: including SiLU-Mul activation operation from SwiGLU~\cite{shazeer2020glu} and 2 GEMMs, often implemented with grouped general matrix multiplication (GroupGEMM~\cite{gale2023megablocks}) to improve hardware utilization.
+    \item \textbf{Expert Computation}: apply the SiLU-Mul activation from SwiGLU~\cite{shazeer2020glu} and two GEMMs, often implemented with grouped general matrix multiplication (GroupGEMM~\cite{gale2023megablocks}) to improve hardware utilization.
     \item \textbf{Combine}: the inverse operator of dispatch, gather and aggregate expert outputs back to the original token order.
 \end{itemize}
 
@@ -171,7 +171,7 @@ which can be significantly larger than that of a single token. This increases bo
 \subsection{Entropy, Perplexity, and Uncertainty}
 \label{sec:bg:uncertainty}
 
-The predictive distribution of a language model provides a intrinsic measure of uncertainty regarding the next token. 
+The predictive distribution of a language model provides an intrinsic measure of uncertainty regarding the next token.
 Given the model's output probability distribution $\mathbf{z}_i$ over the vocabulary $\mathcal{V}$ at step $i$, the Shannon entropy is defined as:
 \begin{equation*}
 H(\mathbf{z}_i) = -\sum_{w \in \mathcal{V}} P(w | \mathbf{z}_i) \log P(w | \mathbf{z}_i).
@@ -182,7 +182,7 @@ The corresponding token-level perplexity is derived as the exponential of the en
 \text{PP}(\mathbf{z}_i) = \exp(H(\mathbf{z}_i)).
 \end{equation*}
 
-While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the "sharpness" of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
+While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
 
 \subsection{Long Reasoning and Token Heterogeneity}
 
@@ -345,7 +345,7 @@ In practice, we use a low-dimensional parameterization (typically 5--6 parameter
 
 We note that for architectures with built-in redundancy, such as models with shared 
 experts, allocation policies with aggressively low Top-$k$ may be achievable without 
-quality degradation. An instance of this (DeepSeek-R1 w/ MTP) is shown in our evaluation 
+quality degradation. An instance of this (DeepSeek-R1 with MTP) is shown in our evaluation
 (Sec.~\ref{sec:evaluation:pareto}).
 
 \subsection{Operating Principles of Spec-K}
@@ -355,12 +355,12 @@ Beyond its routing rule, Spec-K exhibits a special system-level behavior: it app
 This subsection develops a mechanistic account of that behavior.
 
 A full end-to-end perturbation analysis of modern transformers would be intractable and offer limited insight, given the highly nonlinear interaction among attention, MLP, and residual connections.
-We therefore focus on two tractable views of the same behavior: a per-step view based on \emph{local sensitivity} in auto-regressive decoding, and a sequence-level view based on \emph{self-regulation} under uncertainty-aware routing.
+We therefore focus on two tractable views of the same behavior: a per-step view based on \emph{local sensitivity} in autoregressive decoding, and a sequence-level view based on \emph{self-regulation} under uncertainty-aware routing.
 
-\subsubsection{Local Sensitivity of Auto-Regressive Decoding}
+\subsubsection{Local Sensitivity of Autoregressive Decoding}
 
 Spec-K is most aggressive when the current decoding step is predicted to be easy, namely when the speculative candidate has low perplexity.
-This choice can be understood through a basic robustness property of auto-regressive decoding.
+This choice can be understood through a basic robustness property of autoregressive decoding.
 
 Consider decoding step $t$ under greedy generation.
 Let $\mathbf{z}_t \in \mathbb{R}^{V}$ denote the full-model logits over the vocabulary, and let
@@ -488,11 +488,11 @@ Experiments are conducted on a multi-node GPU cluster with 8 NVIDIA H20 GPUs per
 
 We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$k$, where attention layers use DP-$k$ and MoE experts are partitioned across $k$ devices.
 
-Our implementation is based on vLLM~v0.16.0 with Triton-based GroupGEMM kernels and DeepEP in low-latency mode (IBGDA). Prefix caching is disabled to ensure consistent performance and accuracy measurement. Speculative decoding uses padded drafter batches to minimize scheduling overhead. All methods, including the baseline, share the same system stack for fair comparison.
+Our implementation is based on vLLM~v0.16.0 with Triton-based GroupGEMM kernels and DeepEP~\cite{deepep2025} in low-latency mode (IBGDA). Prefix caching is disabled to ensure consistent performance and accuracy measurement. Speculative decoding uses padded drafter batches to minimize scheduling overhead. All methods, including the baseline, share the same system stack for fair comparison.
 
 \subsubsection{Models and Drafting Methods}
 
-We evaluate across multiple model families, including Qwen3, DeepSeek, and GLM, covering scales from 30B to 671B parameters and both shared and non-shared expert architectures.
+We evaluate across multiple model families, including Qwen3~\cite{yang2025qwen3}, DeepSeek~\cite{liu2024deepseek}, and GLM~\cite{zeng2025glm}, covering scales from 30B to 671B parameters and both shared and non-shared expert architectures.
 
 We consider three types of drafting methods: (1) small standalone language models, (2) EAGLE~\cite{li2024eagle} components, and (3) multi-token prediction (MTP~\cite{gloeckle2024better}). Unless otherwise specified, we use a speculation length of $\gamma = 3$, which is typical in practical deployments.
 
@@ -559,7 +559,7 @@ We consider Qwen3-30B-A3B and Qwen3-235B-A22B as target models, paired with Qwen
 Throughput is measured as tokens per second over the entire serving process.
 
 Figure~\ref{fig:throughput_end2end} shows that Spec-K consistently improves throughput across all batch sizes and system configurations. 
-The Lossless and Optimum policies achieve up to $1.44\times$ and $1.72\times$ speedup over the SpecDecode baseline, respectively. 
+The Lossless and Optimum policies achieve up to $1.48\times$ and $1.72\times$ speedup over the SpecDecode baseline, respectively.
 Notably, the improvement holds across both model scales and EP degrees, indicating that the benefit is robust to system and model variations.
 
 The gain becomes more pronounced at larger batch sizes and higher EP degrees. 
@@ -605,7 +605,7 @@ The reduction closely follows the decrease in routing budget, with additional ga
 \textbf{Configuration} & \textbf{30B EP 8 $\rightarrow$ 32} & \textbf{235B EP 16 $\rightarrow$ 32} \\
  & (Local BS 64) & (Local BS 128) \\
 \midrule
-SpecDec Baseline & 58.0\% & 88.5\% \\
+SpecDecode & 58.0\% & 88.5\% \\
 Spec-K Lossless & 71.3\% & 92.5\% \\
 Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
 \bottomrule
@@ -672,14 +672,14 @@ Main configuration used throughout the paper
     }
     \hfil
     \subfloat[{\parbox[c]{0.9\linewidth}{\centering
-Qwen3-30B-Instruct-2507, EAGLE, GSM8K \\
-Non-reasoning model a reasoning calibration
+Qwen3-30B-A3B-Instruct-2507, EAGLE, GSM8K \\
+Non-reasoning model on a reasoning calibration
 }}]{
         \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_gsm8k_cot.pdf}
     }
     \hfil
     \subfloat[{\parbox[c]{0.9\linewidth}{\centering
-Qwen3-30B-Instruct-2507, EAGLE, IFEval \\
+Qwen3-30B-A3B-Instruct-2507, EAGLE, IFEval \\
 Instruction following calibration
 }}]{
         \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_ifeval.pdf}
@@ -742,7 +742,7 @@ Overall, these results show that while the exact tradeoff curve varies across se
 \centering
 \setlength{\tabcolsep}{8pt}
 \renewcommand{\arraystretch}{1.3}
-\caption{Cross-Task Accuracy Results of GSM8K-COT (Score / Top-$k$)}
+\caption{Cross-task transfer of policies calibrated on GSM8K-COT (score / Top-$k$).}
 \label{tab:transfer_accuracy}
 \begin{tabular}{lccc}
 \toprule
@@ -754,7 +754,7 @@ BBH-COT & 70.29 / 8 & 71.17 / 5.86 & 72.67 / 5.32 \\
 
 IFEval {\scriptsize (Prompt Strict)} & 82.81 / 8 & 82.44 / 5.31 & 79.30 / 4.73 \\
 
-HumanEval {\scriptsize (P@64)} & 54.88 / 8 & 60.37 / 5.51 & 67.68 / 4.86 \\
+HumanEval {\scriptsize (Pass@64)} & 54.88 / 8 & 60.37 / 5.51 & 67.68 / 4.86 \\
 
 \bottomrule
 \end{tabular}
@@ -772,7 +772,7 @@ However, on instruction-following tasks (IFEval), the Optimum policy exhibits a 
 This suggests that policies calibrated on reasoning tasks may be slightly over-aggressive when applied to tasks requiring strict structural adherence.
 
 We attribute this behavior to differences in decoding phases. 
-Reasoning tasks involve a "thinking" phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained "answering" phase with lower tolerance for errors. 
+Reasoning tasks involve a ``thinking'' phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained ``answering'' phase with lower tolerance for errors.
 These differences imply that phase-aware allocation policies may further improve performance in practice.
 
 Overall, these results show that routing policies learned from a single task transfer well across related workloads, while leaving room for further gains through phase-specific adaptation.
