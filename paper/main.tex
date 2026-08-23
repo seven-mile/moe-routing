@@ -1,4 +1,5 @@
 \documentclass[conference]{IEEEtran}
+\usepackage{fancyhdr}
 % \IEEEoverridecommandlockouts
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
 
@@ -14,9 +15,7 @@
 \usepackage{threeparttable}
 \usepackage{tabularx}
 \usepackage{bm}
-\usepackage{pgfplots}
 \usepackage[caption=false]{subfig}
-\pgfplotsset{compat=1.18}
 
 \theoremstyle{definition} % Sets style for subsequent \newtheorem commands
 \newtheorem{definition}{Definition}[section] % Numbered by section (e.g., 1.1)
@@ -42,6 +41,16 @@ ORCID: 0000-0003-0022-7865 \\
 }
 
 \maketitle
+\thispagestyle{fancy}
+\lhead{}
+\rhead{}
+\chead{}
+\lfoot{\footnotesize{SC26, November 15-20, 2026, Chicago, Illinois, USA
+\newline 979-8-3195-4789-7/26/\$31.00 \copyright~2026 IEEE}}
+\rfoot{}
+\cfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
 
 \begin{abstract}
 Inference serving for large language models (LLMs) often relies on static resource allocation---such as fixed Top-k routing in Mixture-of-Experts (MoE) models---despite substantial token-level heterogeneity. This mismatch causes systematic over-provisioning, magnified in long reasoning and batched speculative decoding.
@@ -424,9 +433,9 @@ A pure algorithmic implementation---consisting of the allocation policy computat
 
 Each integration preserves its framework's native semantics. The primary vLLM system experiments use the distribution-entropy signal in Eq.~(\ref{eq:preview-signal}) and retain base-Top-$k$-normalized routing weights after masking, as defined above. The HuggingFace prototype uses proposed-token surprisal, $1/P(S_i)$, and renormalizes retained weights after masking. Both instantiate the same pre-execution preview-to-budget interface.
 
-% \subsection{Vectorized Policy Execution}
+\subsection{Vectorized Policy Execution}
 
-% In serving systems that employ continuous batching~\cite{yu2022orca}, allocation policies must be computed per request. A naïve implementation would launch a separate kernel for each request's piecewise policy evaluation, incurring significant kernel launch overhead and potential host--device synchronization stalls. To eliminate this overhead from the critical path, we fuse the entire policy computation into a single Triton~\cite{tillet2019triton} kernel that operates over all tokens in the batch concurrently. With this vectorized implementation, policy calculation accounts for less than $0.1\%$ of total execution time in typical deployment configurations.
+Continuous batching may combine requests that use different fixed policies. Evaluating these policies request by request would introduce repeated kernel launches and host--device coordination. We instead fuse draft-distribution entropy, per-request threshold lookup, and token-wise Top-$k$ assignment into a single Triton~\cite{tillet2019triton} kernel over all candidate tokens in the batch. The kernel produces routing budgets directly on device; the online path contains neither policy search nor an additional prediction pass.
 
 \subsection{Adaptive Kernel Support}
 
@@ -609,42 +618,16 @@ Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
 \subsection{Portability on Ascend NPUs}
 \label{sec:evaluation:ascend}
 
-To examine whether Spec-K's benefits depend on the GPU software stack used above, we additionally evaluate its vLLM-Ascend implementation~\cite{huawei2024vllmascend} on an Ascend NPU platform. We use Qwen3-30B-A3B as the target model, Qwen3-0.6B as the standalone draft model, ShareGPT requests, and seven draft candidates per verification step. At each offered load, Spec-K and SpecDecode use the same model, workload, software stack, and deployment configuration. We report throughput only relative to the corresponding baseline and omit detailed hardware configuration; these measurements provide portability evidence rather than an absolute comparison with Figure~\ref{fig:throughput_end2end}.
+To examine whether Spec-K's benefits depend on the GPU software stack used above, we additionally evaluate its vLLM-Ascend implementation~\cite{huawei2024vllmascend} on an Ascend NPU platform. We use Qwen3-30B-A3B as the target model, Qwen3-0.6B as the standalone draft model, ShareGPT requests, and seven draft candidates per verification step. At each offered load, Spec-K and SpecDecode use the same model, workload, software stack, and deployment configuration. We report only normalized throughput and omit detailed hardware configuration; these measurements provide portability evidence rather than an absolute comparison with Figure~\ref{fig:throughput_end2end}.
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=\columnwidth,
-    height=0.57\columnwidth,
-    ybar,
-    bar width=14pt,
-    ymin=0,
-    ymax=1.5,
-    ylabel={Normalized throughput},
-    xlabel={Concurrent requests},
-    symbolic x coords={128,256,384,512},
-    xtick=data,
-    ytick={0,0.5,1.0,1.5},
-    axis lines*=left,
-    enlarge x limits=0.16,
-    tick align=outside,
-    nodes near coords={\pgfmathprintnumber[fixed,precision=2,fixed zerofill]{\pgfplotspointmeta}$\times$},
-    point meta=y,
-    every node near coord/.append style={font=\footnotesize},
-    legend style={font=\footnotesize, draw=none, at={(0.5,1.02)}, anchor=south, legend columns=2},
-]
-\addplot[fill=blue!55, draw=blue!70!black] coordinates {(128,1.14) (256,1.29) (384,1.32) (512,1.10)};
-\addlegendentry{Spec-K}
-\addplot[black, dashed, mark=none, sharp plot, nodes near coords={}] coordinates {(128,1.00) (256,1.00) (384,1.00) (512,1.00)};
-\addlegendentry{SpecDecode}
-\end{axis}
-\end{tikzpicture}
-\caption{Normalized end-to-end throughput on an Ascend NPU platform. Each result is normalized to SpecDecode at the same concurrency and deployment configuration; absolute throughput and detailed hardware configuration are omitted. Spec-K improves throughput at every tested load. The 512-request setting experiences KV-cache capacity pressure.}
+\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
+\caption{End-to-end throughput on an Ascend NPU platform, normalized to SpecDecode at 128 concurrent requests. Labels above the Spec-K Optimum bars report speedup over SpecDecode at the same concurrency. Absolute throughput and detailed hardware configuration are omitted. The 512-request setting experiences KV-cache capacity pressure.}
 \label{fig:ascend_throughput}
 \end{figure}
 
-As shown in Figure~\ref{fig:ascend_throughput}, Spec-K improves end-to-end throughput by $1.14\times$, $1.29\times$, and $1.32\times$ at 128, 256, and 384 concurrent requests, respectively. At 512 concurrent requests, where KV-cache capacity pressure constrains the deployment, Spec-K still achieves a $1.10\times$ improvement. These results show that the same preview-guided dynamic Top-$k$ mechanism transfers to a distinct accelerator and serving ecosystem without retraining or modifying model weights.
+As shown in Figure~\ref{fig:ascend_throughput}, the Spec-K Optimum policy improves end-to-end throughput by $1.14\times$, $1.29\times$, and $1.32\times$ at 128, 256, and 384 concurrent requests, respectively. At 512 concurrent requests, where KV-cache capacity pressure constrains the deployment, it still achieves a $1.10\times$ improvement. These results show that the same preview-guided dynamic Top-$k$ mechanism transfers to a distinct accelerator and serving ecosystem without retraining or modifying model weights.
 
 \subsection{Where Does the Gain Come From?}
 
@@ -657,7 +640,22 @@ We profile the decoding of 32 tokens under offline inference with simultaneous r
 Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
 Communication behavior depends on the deployment regime. In the inter-node EP-32 case, Dispatch latency falls with routing volume; in the intra-node EP-8 case it is effectively unchanged. Combine latency decreases in both settings but remains substantial because it includes inter-device synchronization and therefore reflects load imbalance in MoE computation.
-In an EP-32 GSM8K runtime sweep, the maximum per-device token--expert assignment volume---the synchronization-relevant critical-path load---falls to $0.68\times$ and $0.59\times$ of the baseline for the Lossless and Optimum policies, respectively. Although normalized skew increases modestly as aggregate work contracts, the absolute critical-path work decreases, consistent with the observed Combine-latency reduction.
+Table~\ref{tab:assignment_load} separates relative imbalance from the absolute work on the critical path in an EP-32 GSM8K runtime sweep. Although max/mean skew increases modestly as aggregate work contracts, the maximum per-device assignment volume falls to $0.68\times$ and $0.59\times$ of the baseline for Lossless and Optimum, respectively. This absolute critical-path reduction is consistent with the observed Combine-latency improvement.
+
+\begin{table}[t]
+\caption{EP-32 assignment load relative to SpecDecode.}
+\label{tab:assignment_load}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric} & \textbf{Baseline} & \textbf{Lossless} & \textbf{Optimum} \\
+\midrule
+Critical-path assignments & $1.00\times$ & $0.68\times$ & $0.59\times$ \\
+Max/mean assignment skew & $1.00\times$ & $1.06\times$ & $1.05\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Overall, the components accelerated by Spec-K account for 80--90\% of the total verification latency, indicating that the method directly targets the dominant bottlenecks in the system. 
 These results demonstrate that routing sparsity introduced by Spec-K translates effectively into both computation and communication savings at the system level.
@@ -687,9 +685,9 @@ Together, these factors contribute to the overall throughput improvement observe
 
 \subsubsection{Comparison with Allocation Baselines}
 
-To isolate the value of the preview signal, we construct a fixed lower-layer policy that reduces the first $n$ MoE layers to a constant $k$ and preserves the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, every tested lower-layer policy is dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at Top-$k$ 5.97. The strongest fixed-policy run scores 90.14 at Top-$k$ 5.73, while Spec-K scores 90.45 at the lower Top-$k$ of 5.45. Thus, unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+To isolate the value of the preview signal, we construct a fixed lower-layer policy that reduces the first $n$ MoE layers to a constant $k$ and preserves the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, every tested lower-layer policy is dominated by the Spec-K frontier. The representative cross in Figure~\ref{fig:frontiers}(a) shows the high-quality comparison: the fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
 
-Lynx~\cite{gupta2024lynx}, a complementary batch-aware expert-remapping system, reports $1.14\times$ and $1.09\times$ throughput improvements at EP degrees 2 and 4, respectively, in its evaluation setup while keeping accuracy within one percentage point. Lynx uses target-side router signals to remap experts at batch level, whereas Spec-K uses pre-execution draft signals to allocate token-wise routing budgets; the two methods optimize complementary dimensions of MoE serving.
+For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ and $1.09\times$ throughput improvements on Qwen2-57B-A14B-Instruct with GSM8K at TP-2/EP-2 and TP-4/EP-4, respectively, while keeping exact-match accuracy within one percentage point. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
 
 \subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
@@ -746,7 +744,7 @@ Limited routing redundancy for $k=4$
         \includegraphics[width=0.31\textwidth]{pareto/glm47flash_mtp_gsm8k_cot.pdf}
     }
 
-    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline.
+    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline; the gold cross in (a) marks a representative fixed lower-layer policy.
 All settings exhibit a consistent tradeoff structure: a plateau region with negligible quality loss followed by a sharp degradation beyond a critical routing threshold.
 Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
     \label{fig:frontiers}
@@ -860,10 +858,10 @@ Training-based methods incorporate adaptivity into the model, including early ex
 These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes.
 
 Training-free methods adapt computation at inference time. 
-Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while MoE-specific methods such as Lynx~\cite{gupta2024lynx} prune experts based on routing confidence. 
+Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while Lynx~\cite{gupta2024lynx} uses target-side router scores to remap low-affinity token--expert assignments onto a smaller batch-level active-expert set while preserving the model's per-token Top-$k$.
 These approaches typically rely on signals observed during execution and operate at token-, block-, or batch-level.
 
-In contrast, our method performs \emph{pre-execution} adaptation using preview signals, enabling token-level resource allocation before the target forward pass, suggesting a new paradigm for guiding adaptive inference.
+In contrast, Spec-K uses a draft signal available before target execution to vary each token's routing budget, reducing token--expert assignments themselves rather than only their batch-level union.
 
 \section{Discussion and Conclusion}
 

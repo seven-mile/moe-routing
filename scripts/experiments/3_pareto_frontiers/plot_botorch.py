@@ -265,6 +265,7 @@ def write_outputs(
     baseline_score_std=0.0,
     y_min_override=None,
     font_scale=1.0,
+    fixed_layer_point=None,
 ):
     scores = np.array([r["score"] for r in rows], dtype=float)
     topks = np.array([r["mean_topk"] for r in rows], dtype=float)
@@ -483,6 +484,7 @@ def write_outputs(
             y_min=ax.get_ylim()[0],
             y_max=ax.get_ylim()[1],
         )
+
         annotate_point(
             ax,
             optimum["mean_topk"],
@@ -498,6 +500,19 @@ def write_outputs(
             ha="left",
             va="top",
             zorder=10,
+        )
+
+    if fixed_layer_point is not None:
+        ax.scatter(
+            [fixed_layer_point[0]],
+            [fixed_layer_point[1]],
+            s=54,
+            marker="X",
+            color="#c58a00",
+            edgecolors="white",
+            linewidths=0.8,
+            alpha=0.8,
+            zorder=7,
         )
 
     if show_baseline_label:
@@ -571,6 +586,14 @@ def main():
     ap.add_argument("--out_pdf", type=str, default=None, help="Path to output PDF file.")
     ap.add_argument("--legend_pdf", type=str, default=None, help="Path to output legend PDF file.")
     ap.add_argument("--show_pareto", action="store_true", help="Print pareto points to console.")
+    ap.add_argument(
+        "--fixed_layer_point",
+        type=float,
+        nargs=2,
+        metavar=("MEAN_TOPK", "SCORE_PCT"),
+        default=None,
+        help="Optional representative fixed-layer baseline point.",
+    )
     args = ap.parse_args()
 
     path = Path(args.infile)
@@ -615,6 +638,7 @@ def main():
         baseline_score_std=baseline_score_std,
         y_min_override=y_min_override,
         font_scale=font_scale,
+        fixed_layer_point=args.fixed_layer_point,
     )
 
     if args.show_pareto:

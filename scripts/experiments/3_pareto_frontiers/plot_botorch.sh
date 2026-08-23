@@ -35,6 +35,7 @@ run_case "$RESULT_DIR/optimization_results_lmeval_30b_0b6_gsm8k_cot.json" \
     --baseline_score 90.17 \
     --baseline_score_std 0.81 \
     --baseline_topk 8 \
+    --fixed_layer_point 6.010569 88.9310 \
 
 run_case "$RESULT_DIR/optimization_results_lmeval_30b_0b6_gsm8k_cot_neo.json" \
     --baseline_score 90.17 \
