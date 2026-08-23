@@ -626,10 +626,10 @@ We profile the decoding of 32 tokens under offline inference with simultaneous r
 Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
 Communication behavior depends on the deployment regime. In the inter-node EP-32 case, Dispatch latency falls with routing volume; in the intra-node EP-8 case it is effectively unchanged. Combine latency decreases in both settings but remains substantial because it includes inter-device synchronization and therefore reflects load imbalance in MoE computation.
-Table~\ref{tab:assignment_load} separates relative imbalance from the absolute work on the critical path in an EP-32 GSM8K runtime sweep. Although max/mean skew increases modestly as aggregate work contracts, the maximum per-device assignment volume falls to $0.68\times$ and $0.59\times$ of the baseline for Lossless and Optimum, respectively. This absolute critical-path reduction is consistent with the observed Combine-latency improvement.
+Table~\ref{tab:assignment_load} separates bottleneck work from relative imbalance in an EP-32 GSM8K sweep. Busiest-device work is relative to SpecDecode; imbalance is the maximum-to-mean device load after normalizing assignment counts by target-model decode layer positions. Although this imbalance rises modestly from $1.47\times$ to $1.55\times$, busiest-device work falls to $0.68\times$ and $0.59\times$ for Lossless and Optimum, respectively, consistent with lower Combine latency.
 
 \begin{table}[t]
-\caption{EP-32 assignment load relative to SpecDecode.}
+\caption{EP-32 busiest-device work and load imbalance.}
 \label{tab:assignment_load}
 \centering
 \small
@@ -637,8 +637,8 @@ Table~\ref{tab:assignment_load} separates relative imbalance from the absolute w
 \toprule
 \textbf{Metric} & \textbf{Baseline} & \textbf{Lossless} & \textbf{Optimum} \\
 \midrule
-Critical-path assignments & $1.00\times$ & $0.68\times$ & $0.59\times$ \\
-Max/mean assignment skew & $1.00\times$ & $1.06\times$ & $1.05\times$ \\
+Busiest-device work & $1.00\times$ & $0.68\times$ & $0.59\times$ \\
+Imbalance (max/mean) & $1.47\times$ & $1.55\times$ & $1.55\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -671,7 +671,7 @@ Together, these factors contribute to the overall throughput improvement observe
 
 \subsubsection{Comparison with Allocation Baselines}
 
-To isolate the value of the preview signal, we construct a fixed lower-layer policy that reduces the first $n$ MoE layers to a constant $k$ and preserves the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, every tested lower-layer policy is dominated by the Spec-K frontier. The representative cross in Figure~\ref{fig:frontiers}(a) shows the high-quality comparison: the fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
 
 For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ and $1.09\times$ throughput improvements on Qwen2-57B-A14B-Instruct with GSM8K at TP-2/EP-2 and TP-4/EP-4, respectively, while keeping exact-match accuracy within one percentage point. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
 
@@ -682,7 +682,7 @@ For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ and $
 \begin{figure*}[t]
     \centering
 
-    \includegraphics[width=0.475\textwidth]{pareto/legend.pdf}
+    \includegraphics[width=0.625\textwidth]{pareto/legend.pdf}
 
     \vspace{-0.2cm}
     
@@ -730,7 +730,7 @@ Limited routing redundancy for $k=4$
         \includegraphics[width=0.31\textwidth]{pareto/glm47flash_mtp_gsm8k_cot.pdf}
     }
 
-    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline; the gold cross in (a) marks a representative fixed lower-layer policy.
+    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline; the three gold crosses in (a) mark fixed lower-layer controls.
 All settings exhibit a consistent tradeoff structure: a plateau region with negligible quality loss followed by a sharp degradation beyond a critical routing threshold.
 Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
     \label{fig:frontiers}

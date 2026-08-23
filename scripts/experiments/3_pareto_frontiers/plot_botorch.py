@@ -231,11 +231,21 @@ def build_legend_figure():
             markersize=8,
             label="Optimum",
         ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="X",
+            color="none",
+            markerfacecolor="#c58a00",
+            markeredgecolor="white",
+            markersize=8,
+            label="Fixed-layer",
+        ),
     ]
     legend = fig.legend(
         handles=handles,
         loc="center",
-        ncol=3,
+        ncol=4,
         frameon=True,
         fancybox=True,
         framealpha=0.92,
@@ -265,7 +275,7 @@ def write_outputs(
     baseline_score_std=0.0,
     y_min_override=None,
     font_scale=1.0,
-    fixed_layer_point=None,
+    fixed_layer_points=None,
 ):
     scores = np.array([r["score"] for r in rows], dtype=float)
     topks = np.array([r["mean_topk"] for r in rows], dtype=float)
@@ -502,16 +512,16 @@ def write_outputs(
             zorder=10,
         )
 
-    if fixed_layer_point is not None:
+    if fixed_layer_points:
         ax.scatter(
-            [fixed_layer_point[0]],
-            [fixed_layer_point[1]],
-            s=54,
+            [point[0] for point in fixed_layer_points],
+            [point[1] for point in fixed_layer_points],
+            s=60,
             marker="X",
             color="#c58a00",
             edgecolors="white",
             linewidths=0.8,
-            alpha=0.8,
+            alpha=0.78,
             zorder=7,
         )
 
@@ -590,9 +600,10 @@ def main():
         "--fixed_layer_point",
         type=float,
         nargs=2,
+        action="append",
         metavar=("MEAN_TOPK", "SCORE_PCT"),
         default=None,
-        help="Optional representative fixed-layer baseline point.",
+        help="Optional fixed-layer baseline point; repeat for multiple points.",
     )
     args = ap.parse_args()
 
@@ -638,7 +649,7 @@ def main():
         baseline_score_std=baseline_score_std,
         y_min_override=y_min_override,
         font_scale=font_scale,
-        fixed_layer_point=args.fixed_layer_point,
+        fixed_layer_points=args.fixed_layer_point,
     )
 
     if args.show_pareto:
