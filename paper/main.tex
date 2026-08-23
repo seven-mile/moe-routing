@@ -181,7 +181,7 @@ The corresponding token-level perplexity is derived as the exponential of the en
 \text{PP}(\mathbf{p}_i) = \exp(H(\mathbf{p}_i)).
 \end{equation*}
 
-While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the "sharpness" of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
+While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
 
 \subsection{Long Reasoning and Token Heterogeneity}
 
@@ -788,7 +788,7 @@ However, on instruction-following tasks (IFEval), the Optimum policy exhibits a 
 This suggests that policies calibrated on reasoning tasks may be slightly over-aggressive when applied to tasks requiring strict structural adherence.
 
 We attribute this behavior to differences in decoding phases. 
-Reasoning tasks involve a "thinking" phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained "answering" phase with lower tolerance for errors. 
+Reasoning tasks involve a ``thinking'' phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained ``answering'' phase with lower tolerance for errors.
 These differences imply that phase-aware allocation policies may further improve performance in practice.
 A serving system can realize this by selecting an offline-calibrated policy for the request's generation regime.
 
