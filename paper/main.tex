@@ -647,7 +647,7 @@ These results demonstrate that routing sparsity introduced by Spec-K translates 
 \subsubsection{Effect on Acceptance Rate}
 
 % figure: topk vs acceptance
-\begin{figure}[htbp]
+\begin{figure}[t]
 \centerline{\includegraphics[width=0.8\linewidth]{total_topk_vs_acc.pdf}}
 \caption{Acceptance rate versus average routing budget (Top-$k$) for Qwen3-30B-A3B with Qwen3-0.6B on ShareGPT.
 Each point corresponds to a policy selected from the Pareto frontier.
@@ -655,28 +655,7 @@ Reducing the routing budget consistently increases acceptance across the evaluat
 \label{fig:topk_vs_acceptance}
 \end{figure}
 
-In addition to reducing per-step latency, Spec-K also improves the efficiency of speculative decoding by increasing the acceptance rate.
-
-To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B. 
-Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
-
-Remarkably, lower average Top-$k$ consistently yields higher acceptance along the evaluated Spec-K frontier. This reveals a previously overlooked systems effect: adaptive target-side routing improves both sides of speculative verification, reducing the cost of each verification step while increasing the number of draft tokens accepted per step. The Pareto evaluation below identifies the operating region where this gain is retained without material target-quality loss.
-
-This effect is complementary to system-level optimizations: while reduced routing lowers the cost of each verification step, higher acceptance increases the number of output tokens committed per target-model step.
-Together, these factors contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
-
-\subsection{Quality--Efficiency Tradeoff and Generalization}
-
-\subsubsection{Comparison with Allocation Baselines}
-
-To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
-
-For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ and $1.09\times$ throughput improvements on Qwen2-57B-A14B-Instruct with GSM8K at TP-2/EP-2 and TP-4/EP-4, respectively, while keeping exact-match accuracy within one percentage point. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
-
-\subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
-
-% figure: pareto frontiers of 6 settings
-
+% Queue the full-width quality result for the next page.
 \begin{figure*}[t]
     \centering
 
@@ -705,8 +684,6 @@ Instruction following calibration
         \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_ifeval.pdf}
     }
 
-    % \vspace{0.2cm}
-
     \subfloat[{\parbox[c]{0.9\linewidth}{\centering
 Qwen3-30B-A3B, EAGLE, GSM8K \\
 Ablation on drafting method
@@ -734,6 +711,25 @@ Spec-K identifies operating points along this frontier, including a lossless reg
     \label{fig:frontiers}
 \end{figure*}
 
+In addition to reducing per-step latency, Spec-K also improves the efficiency of speculative decoding by increasing the acceptance rate.
+
+To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B.
+Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
+
+Remarkably, lower average Top-$k$ consistently yields higher acceptance along the evaluated Spec-K frontier. This reveals a previously overlooked systems effect: adaptive target-side routing improves both sides of speculative verification, reducing the cost of each verification step while increasing the number of draft tokens accepted per step. The Pareto evaluation below identifies the operating region where this gain is retained without material target-quality loss.
+
+This effect is complementary to system-level optimizations: reduced routing lowers verification cost, while higher acceptance commits more output tokens per target-model step.
+Together, they drive the throughput gains in Section~\ref{sec:evaluation:end2end}.
+
+\subsection{Quality--Efficiency Tradeoff and Generalization}
+
+\subsubsection{Comparison with Allocation Baselines}
+
+To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+
+For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ and $1.09\times$ throughput improvements on Qwen2-57B-A14B-Instruct with GSM8K at TP-2/EP-2 and TP-4/EP-4, respectively, while keeping exact-match accuracy within one percentage point. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
+
+\subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
 We analyze the quality--efficiency tradeoff of Spec-K across diverse model architectures, drafting methods, and tasks.
 
@@ -805,8 +801,8 @@ We further evaluate Spec-K with vLLM-Ascend~\cite{huawei2024vllmascend} to study
 
 \begin{figure}[!b]
 \centering
-\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
-\caption{Normalized end-to-end throughput on an Ascend NPU platform. Values are normalized to SpecDecode at 128 concurrent requests; annotations report Spec-K Optimum speedup over SpecDecode at the corresponding load. The 512-request setting experiences KV-cache capacity pressure.}
+\includegraphics[width=\linewidth,trim=12bp 8bp 2bp 12bp,clip]{ascend/normalized_throughput.pdf}
+\caption{Normalized end-to-end throughput on an Ascend NPU platform, using SpecDecode at 128 concurrent requests as the common reference. Labels report Spec-K Optimum speedup; the 512-request setting experiences KV-cache capacity pressure.}
 \label{fig:ascend_throughput}
 \end{figure}
 
