@@ -165,7 +165,7 @@ During verification, the target model processes $1+\gamma$ tokens in parallel (i
 \begin{equation*}
 \mathcal{U}_L^{\text{SD}} = \bigcup_i \bigcup_{j=1}^{1+\gamma} \mathcal{S}_{L,(i,j)},
 \end{equation*}
-which can be significantly larger than that of a single token. This increases communication overhead in dispatch/combine and reduces the efficiency of grouped expert execution.
+Here, $i$ and $j$ index batch requests and verification-block positions, respectively; the larger union increases dispatch/combine traffic and reduces grouped-execution efficiency.
 
 \subsection{Entropy, Perplexity, and Uncertainty}
 \label{sec:bg:uncertainty}
@@ -181,7 +181,7 @@ The corresponding token-level perplexity is derived as the exponential of the en
 \text{PP}(\mathbf{p}_i) = \exp(H(\mathbf{p}_i)).
 \end{equation*}
 
-While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
+While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $M$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $M$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
 
 \subsection{Long Reasoning and Token Heterogeneity}
 
@@ -273,7 +273,7 @@ This modification ensures that tokens with a reduced budget $\hat k_i$ activate 
 
 The benefits of this adaptive allocation are directly reflected in the system cost $\mathcal{C}(\mathbf{A})$.
 In MoE routing, both expert computation (FLOPs) and dispatch/combine communication scale approximately linearly with the number of activated experts.
-Consequently, the resource cost of a verification step satisfies $\mathcal{C}(\mathbf{A}) \propto \sum_i \hat k_i$.
+Consequently, the resource cost of a verification step satisfies $\mathcal{C}(\mathbf{A}) \propto \sum_{i=1}^{1+\gamma} \hat k_i$.
 By reducing $\hat k_i$ for low-uncertainty tokens, Spec-K directly lowers both the computational load and the cross-device communication traffic during verification.
 
 In practice, this preview-guided allocation can also improve speculative acceptance 
@@ -333,8 +333,7 @@ Selecting the thresholds in $f(\cdot)$ determines how routing sparsity adapts to
 This defines a search function that maps policy to (quality, speed), and induces a two-objective optimization problem over these two metrics.
 Its solution is characterized by a Pareto frontier, which exposes a diverse set of operating points, allowing users to select a policy that matches their desired trade-off.
 
-The search is performed over the threshold parameters $\{a_i\}$ in $f(\cdot)$, which carry the monotonicity constraint in Eq.~(\ref{eq:monotonicity}).
-To optimize over this constrained space, we use a positive scale $s=a_k$ and ratios $b_i = a_i / a_{i+1} \in [0, 1]$. The thresholds are reconstructed recursively as $a_i=b_i a_{i+1}$, so the ordering is ensured by construction while $s$ preserves the absolute signal scale.
+We search over the thresholds $\{a_i\}$ in $f(\cdot)$ under Eq.~(\ref{eq:monotonicity}), using a positive scale $s=a_k$ and ratios $b_i = a_i / a_{i+1} \in [0, 1]$ for $i=1,\ldots,k-1$. Reconstructing $a_i=b_i a_{i+1}$ recursively ensures their ordering, while $s$ preserves the absolute signal scale.
 
 We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
 Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
@@ -363,9 +362,9 @@ Spec-K is most aggressive when the current decoding step is predicted to be easy
 This choice can be understood through a basic robustness property of autoregressive decoding.
 
 Consider decoding step $t$ under greedy generation.
-Let $\mathbf{z}_t \in \mathbb{R}^{V}$ denote the full-model logits over the vocabulary, and let
+Let $\mathbf{z}_t \in \mathbb{R}^{|\mathcal{V}|}$ denote the full-model logits over the vocabulary $\mathcal{V}$, and let
 $
-y_t^\star = \arg\max_i \mathbf{z}_t(i)
+y_t^\star = \arg\max_{v \in \mathcal{V}} \mathbf{z}_t(v)
 $
 denote the selected token.
 Suppose reduced routing induces an effective perturbation to the logits, yielding approximate logits
@@ -374,7 +373,7 @@ $
 $
 Define the top-1 margin of the full model as
 \begin{equation}
-m_t = \mathbf{z}_t(y_t^\star) - \max_{j \neq y_t^\star} \mathbf{z}_t(j).
+m_t = \mathbf{z}_t(y_t^\star) - \max_{v \in \mathcal{V},\,v \neq y_t^\star} \mathbf{z}_t(v).
 \end{equation}
 If the perturbation satisfies
 $
@@ -382,7 +381,7 @@ $
 $
 then the greedy decision is preserved, i.e.,
 $
-\arg\max_i \hat{\mathbf{z}}_t(i) = y_t^\star.
+\arg\max_{v \in \mathcal{V}} \hat{\mathbf{z}}_t(v) = y_t^\star.
 $
 
 In practice, low-perplexity tokens tend to have more peaked next-token distributions, so the same routing reduction is less likely to change the selected token.
@@ -429,7 +428,7 @@ To validate the generality of our approach, we implement Spec-K across four repr
 
 A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
 
-Each integration preserves its framework's native semantics. The primary vLLM system experiments use the distribution-entropy signal in Eq.~(\ref{eq:preview-signal}) and retain base-Top-$k$-normalized routing weights after masking, as defined above. The HuggingFace prototype uses proposed-token perplexity, $1/P(S_i)$, and renormalizes retained weights after masking. Both instantiate the same pre-execution preview-to-budget interface.
+Each integration preserves its framework's native semantics. The primary vLLM system experiments use the distribution-entropy signal in Eq.~(\ref{eq:preview-signal}) and retain base-Top-$k$-normalized routing weights after masking, as defined above. The HuggingFace prototype uses proposed-token perplexity, $1/p_i(S_i)$, and renormalizes retained weights after masking. Both instantiate the same pre-execution preview-to-budget interface.
 
 \subsection{Vectorized Policy Execution}
 
@@ -466,7 +465,7 @@ The primary challenge lies in the device-side All-to-All collectives used for ex
         End-to-end throughput on ShareGPT under different model scales and expert parallelism (EP) configurations.
         Spec-K consistently improves throughput over SpecDecode, achieving up to $1.72\times$ speedup.
         The gain becomes more pronounced at larger batch sizes and higher EP degrees, where communication and load imbalance dominate.
-        The Lossless and Optimum policies are selected from the Pareto frontier of Qwen3-30B-A3B with Qwen3-0.6B, with average routing budgets $k=5.35$ and $k=4.91$, respectively.
+        The Lossless and Optimum policies are selected from the Pareto frontier of Qwen3-30B-A3B with Qwen3-0.6B, with average routing budgets of 5.35 and 4.91, respectively.
     }
     \label{fig:throughput_end2end}
 \end{figure*}
@@ -488,7 +487,7 @@ We therefore select representative settings that isolate key factors and reflect
 
 Experiments are conducted on a multi-node GPU cluster with 8 NVIDIA H20 GPUs per node (96\,GB memory), connected via NVLink within each node and an NDR InfiniBand fabric across nodes. Each node is equipped with a 400\,Gb/s NVIDIA ConnectX-7 NIC.
 
-We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$k$, where attention layers use DP-$k$ and MoE experts are partitioned across $k$ devices.
+We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$d$, where attention layers use DP-$d$ and MoE experts are partitioned across $d$ devices.
 
 Our implementation is based on vLLM~v0.16.0 with Triton-based GroupGEMM kernels and DeepEP~\cite{deepep2025} in low-latency mode (IBGDA). Prefix caching is disabled to ensure consistent performance and accuracy measurement. Speculative decoding uses padded drafter batches to minimize scheduling overhead. All methods, including the baseline, share the same system stack for fair comparison.
 
@@ -725,7 +724,7 @@ Together, they drive the throughput gains in Section~\ref{sec:evaluation:end2end
 
 \subsubsection{Comparison with Allocation Baselines}
 
-To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k_{\mathrm{fixed}}$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
 
 For context across systems, Lynx~\cite{gupta2024lynx} reports $1.14\times$ lower median time per output token on Qwen3-30B-A3B-Instruct with GSM8K, with exact-match accuracy decreasing from 88.4\% to 87.6\%. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
 
