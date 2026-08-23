@@ -1,4 +1,5 @@
 \documentclass[conference]{IEEEtran}
+\usepackage{fancyhdr}
 % \IEEEoverridecommandlockouts
 % The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
 
@@ -14,7 +15,6 @@
 \usepackage{threeparttable}
 \usepackage{tabularx}
 \usepackage{bm}
-\usepackage{todonotes}
 \usepackage[caption=false]{subfig}
 
 \theoremstyle{definition} % Sets style for subsequent \newtheorem commands
@@ -26,20 +26,32 @@
 
 \title{Spec-K: Adaptive Resource Allocation via Speculative Preview for Efficient MoE Inference}
 
-\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\author{\IEEEauthorblockN{Zhi Ma}
+\IEEEauthorblockA{\textit{Beijing University of Posts and Telecommunications} \\
+Beijing, China \\
+mz@bupt.edu.cn \\
+ORCID: 0009-0009-9847-2770}
 \and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
+\IEEEauthorblockN{Shigang Li}
+\IEEEauthorblockA{\textit{Beijing University of Posts and Telecommunications} \\
+Beijing, China \\
+shigangli.cs@gmail.com \\
+ORCID: 0000-0003-0022-7865 \\
+\textit{Corresponding author}}
 }
 
 \maketitle
+\thispagestyle{fancy}
+\lhead{}
+\rhead{}
+\chead{}
+\lfoot{\footnotesize{
+SC26, November 15-20, 2026, Chicago, Illinois, USA
+\newline 979-8-3195-4789-7/26/\$31.00 \copyright~2026 IEEE}}
+\rfoot{}
+\cfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
 
 \begin{abstract}
 Inference serving for large language models (LLMs) often relies on static resource allocation---such as fixed Top-k routing in Mixture-of-Experts (MoE) models---despite substantial token-level heterogeneity. This mismatch causes systematic over-provisioning, magnified in long reasoning and batched speculative decoding.
