@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+plt.rcParams.update({"pdf.fonttype": 42, "ps.fonttype": 42})
+
+
 def load_json(path: Path):
     return json.loads(path.read_text())
 

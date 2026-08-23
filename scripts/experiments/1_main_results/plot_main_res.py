@@ -8,6 +8,8 @@ from matplotlib.lines import Line2D
 
 # 设置学术风格参数
 plt.rcParams.update({
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
     'font.family': 'sans-serif',
     'font.sans-serif': ['DejaVu Sans', 'Liberation Sans', 'Noto Sans', 'Arial', 'sans-serif'],
     'font.size': 10,

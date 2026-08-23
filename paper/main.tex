@@ -14,7 +14,6 @@
 \usepackage{threeparttable}
 \usepackage{tabularx}
 \usepackage{bm}
-\usepackage{todonotes}
 \usepackage[caption=false]{subfig}
 
 \theoremstyle{definition} % Sets style for subsequent \newtheorem commands
@@ -26,6 +25,8 @@
 
 \title{Spec-K: Adaptive Resource Allocation via Speculative Preview for Efficient MoE Inference}
 
+% CAMERA-READY TODO: Replace this block with the submitted author list in the
+% original order; SC26 does not permit author-list changes after reviews.
 \author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
 \IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
 \textit{name of organization (of Aff.)}\\
@@ -80,15 +81,15 @@ This suggests a general principle: \emph{resource allocation should adapt to tok
 The framework consists of three components: (1) the draft model provides a \emph{preview signal} (e.g., uncertainty) for candidate tokens; 
 (2) an \emph{adaptive allocation policy} maps this signal to a resource allocation plan; 
 (3) the target model executes with the allocated resources, reducing waste on easy tokens. 
-This abstraction decouples preview generation from policy design, enabling flexible extension to other resources (e.g., attention sparsity, layer skipping).}
+This abstraction decouples preview generation from policy design. Extensions to resources such as attention sparsity or layer skipping remain future work.}
 \label{fig:rasp_framework}
 \end{figure}
 
 Based on this principle, we introduce \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive inference. 
 RASP decomposes the inference process into three components: (1) a \emph{preview signal} that estimates token difficulty, (2) a \emph{allocation policy} that maps this signal to a resource allocation plan, and (3) the \emph{adaptive target model execution} that realizes the allocation with speedup. 
-Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free and zero-overhead adaptation.
+Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free adaptation without an additional predictor or model pass.
 This abstraction enables fine-grained, online adjustment of compute budgets, allowing systems to allocate more resources to difficult tokens while reducing waste on easy ones. 
-Beyond MoE routing, the framework naturally extends to other forms of adaptive computation, such as sparse attention or layer skipping.
+Beyond MoE routing, the framework may inform other forms of adaptive computation, such as sparse attention or layer skipping; this paper evaluates only the MoE instantiation.
 
 As a concrete instantiation of RASP, we propose \mbox{\textbf{Spec-K}}, a training-free dynamic Top-$k$ routing method for MoE inference. 
 Spec-K leverages speculative preview to estimate token uncertainty and assigns a token-wise routing budget accordingly. 
@@ -159,7 +160,7 @@ which can be significantly larger than that of a single token. This increases bo
 \subsection{Entropy, Perplexity, and Uncertainty}
 \label{sec:bg:uncertainty}
 
-The predictive distribution of a language model provides a intrinsic measure of uncertainty regarding the next token. 
+The predictive distribution of a language model provides an intrinsic measure of uncertainty regarding the next token.
 Given the model's output probability distribution $\mathbf{z}_i$ over the vocabulary $\mathcal{V}$ at step $i$, the Shannon entropy is defined as:
 \begin{equation*}
 H(\mathbf{z}_i) = -\sum_{w \in \mathcal{V}} P(w | \mathbf{z}_i) \log P(w | \mathbf{z}_i).
@@ -220,7 +221,7 @@ Its structure depends on the adaptation target: a vector of expert counts for Mo
 The target model interprets $\mathbf{A}$ to modulate per-token resource usage, while model weights remain unchanged.
 
 Executing with plan $\mathbf{A}$ incurs a system cost $\mathcal{C}(\mathbf{A})$, whose form depends on the resource being controlled. 
-Adaptive allocation seeks to minimize $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint.
+Adaptive allocation seeks to minimize $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint, where the expectation is over the deployment workload and the constraint specifies an application metric relative to the fixed-allocation baseline.
 
 RASP thus defines a compositional design space along three axes: the choice of preview signal $\Psi$, the design of allocation policy $\mathcal{F}$, and the structure of the allocation plan $\mathbf{A}$. 
 In this work, we instantiate RASP for MoE routing using uncertainty-based preview signals, resulting in \textbf{Spec-K}.
@@ -237,6 +238,7 @@ For each candidate token $S_i$, let $\mathbf{z}_i$ denote its predictive distrib
 We compute the preview signal as its perplexity:
 \begin{equation}
 \psi_i = \exp(H(\mathbf{z}_i)), \quad i = 1,\dots,\gamma.
+\label{eq:preview-signal}
 \end{equation}
 This choice of signal extracts a highly interpretable, compressed representation of token difficulty from the rich, high-dimensional information available in the draft model's forward pass (e.g., hidden states or attention patterns).
 We analyze the advantages of this uncertainty-based signal in Sec.~\ref{sec:mechanism}, showing that it provides a principled basis for allocation by identifying tokens where approximation is naturally more tolerable.
@@ -247,16 +249,17 @@ The allocation policy then maps this signal vector $\boldsymbol{\Psi}$ to a reso
 \end{equation}
 
 Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer.
-For a token $t_i$ with hidden state $\mathbf{x}_{L,i}$ at layer $L$, the standard routing computes gating weights $\mathcal{G}_{L,i,j} = \operatorname{Norm}(\operatorname{TopK}(\operatorname{Gate}(\mathbf{x}_{L,i}), k))_j$.
+Here, $k$ is the model's trained base routing budget and an upper bound: Spec-K removes lower-ranked assignments but never activates experts beyond the base Top-$k$.
+For a token $t_i$ with hidden state $\mathbf{x}_{L,i}$ at layer $L$, let $e_{L,i,r}$ denote the expert at rank $r$ after sorting the selected experts by gate score. Standard routing computes the corresponding weights $w_{L,i,r} = \operatorname{Norm}(\operatorname{TopK}(\operatorname{Gate}(\mathbf{x}_{L,i}), k))_r$ for ranks $r=1,\ldots,k$.
 Spec-K applies a straightforward zero-masking based on the allocated budget $\hat k_i$:
 \begin{equation}
-\hat{\mathcal{G}}_{L,i,j} =
+\hat{w}_{L,i,r} =
 \begin{cases}
-\mathcal{G}_{L,i,j}, & j\le\hat{k}_i\\
+w_{L,i,r}, & r\le\hat{k}_i\\
 0, & \text{otherwise}
 \end{cases}
 \end{equation}
-This modification ensures that tokens with a reduced budget $\hat k_i$ activate only the top $\hat k_i$ experts, leaving the rest unused without affecting the weight normalization of the active experts, if any.
+This modification ensures that tokens with a reduced budget $\hat k_i$ activate only experts $e_{L,i,1},\ldots,e_{L,i,\hat k_i}$. Our primary vLLM path retains the base-Top-$k$-normalized weights and does not renormalize after masking.
 
 The benefits of this adaptive allocation are directly reflected in the system cost $\mathcal{C}(\mathbf{A})$.
 In MoE routing, both expert computation (FLOPs) and dispatch/combine communication scale approximately linearly with the number of activated experts.
@@ -323,11 +326,12 @@ This defines a search function that maps policy to (quality, speed), and induces
 Its solution is characterized by a Pareto frontier, which exposes a diverse set of operating points, allowing users to select a policy that matches their desired trade-off.
 
 The search is performed over the threshold parameters $\{a_i\}$ in $f(\cdot)$, which carry the monotonicity constraint in Eq.~(\ref{eq:monotonicity}).
-To optimize over this constrained space, we reparameterize $\{a_i\}$ using
-$b_i = a_i / a_{i+1} \in [0, 1]$, yielding a set of bounded and independent variables; the ordering of $\{a_i\}$ is then ensured by construction.
+To optimize over this constrained space, we use a positive scale $s=a_k$ and ratios $b_i = a_i / a_{i+1} \in [0, 1]$. The thresholds are reconstructed recursively as $a_i=b_i a_{i+1}$, so the ordering is ensured by construction while $s$ preserves the absolute signal scale.
 
 We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
 Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
+
+This optimization is an offline calibration step. At serving time, the selected thresholds are fixed, and runtime execution consists only of the piecewise policy and routing mask; BoTorch, per-batch search, and additional prediction models are not on the inference path.
 
 In practice, we use a low-dimensional parameterization (typically 5--6 parameters for $k=8$ by disabling the leading over-aggressive positions), which keeps the search efficient; the overall cost is dominated by model inference during evaluation.
 
@@ -417,13 +421,15 @@ To validate the generality of our approach, we implement Spec-K across four repr
 
 A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
 
+The primary vLLM system experiments use the distribution-entropy signal in Eq.~(\ref{eq:preview-signal}) and retain base-Top-$k$-normalized routing weights after masking, as defined above. The HuggingFace prototype follows its assisted-generation interface by using proposed-token surprisal, $1/P(S_i)$, as the uncertainty signal and renormalizing retained weights after masking. These choices share the same preview-guided allocation interface, but we do not treat their numerical policies as interchangeable.
+
 % \subsection{Vectorized Policy Execution}
 
 % In serving systems that employ continuous batching~\cite{yu2022orca}, allocation policies must be computed per request. A naïve implementation would launch a separate kernel for each request's piecewise policy evaluation, incurring significant kernel launch overhead and potential host--device synchronization stalls. To eliminate this overhead from the critical path, we fuse the entire policy computation into a single Triton~\cite{tillet2019triton} kernel that operates over all tokens in the batch concurrently. With this vectorized implementation, policy calculation accounts for less than $0.1\%$ of total execution time in typical deployment configurations.
 
 \subsection{Adaptive Kernel Support}
 
-Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert, and we observe no significant degradation in load balance under Spec-K's adaptive routing budgets.
+Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert. Section~\ref{sec:evaluation:end2end} quantifies both the resulting absolute critical-path reduction and the modest change in relative skew.
 
 The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. When routing budgets vary across tokens under Spec-K, this fixed partitioning leads to warp-level imbalance. We augment the workload partitioning with adaptive rebalancing that accounts for per-token budget variations. Microbenchmarks confirm that this adjustment brings observed communication latency into closer alignment with the theoretical reduction in communication volume.
 
@@ -578,8 +584,7 @@ This suggests that Spec-K not only improves single-node efficiency, but also mit
     }
 
     \caption{Latency breakdown of the verification step for SpecDecode and Spec-K (Optimum policy).
-Spec-K reduces latency across all major components, including computation (GroupGEMM) and communication (Dispatch and Combine).
-The reduction closely follows the decrease in routing budget, with additional gains from improved kernel efficiency.}
+    Spec-K reduces total latency in both settings: GroupGEMM and Combine decrease in both cases, while Dispatch decreases in the inter-node EP-32 case and remains effectively unchanged in the intra-node EP-8 case.}
     \label{fig:overall_latency_breakdown}
 \end{figure}
 
@@ -608,9 +613,10 @@ To understand the source of the end-to-end speedup, we analyze the latency of th
 
 We profile the decoding of 32 tokens under offline inference with simultaneous request issuance to minimize scheduling effects. Two representative settings are considered: (1) Qwen3-30B-A3B with EP=8 at global batch size 1024 (intra-node), and (2) Qwen3-235B-A22B with EP=32 at global batch size 2048 (inter-node).
 
-Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K consistently reduces latency across all major components. GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
+Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
-Communication overhead is also reduced. Dispatch latency closely follows the reduction in routing volume, while Combine latency improves more moderately. Notably, Combine latency substantially exceeds Dispatch latency in both settings, primarily due to inter-GPU synchronization, reflecting the overhead induced by load imbalance in MoE computation. The observed reduction in Combine latency indicates that Spec-K does not degrade EP load balance.
+Communication behavior depends on the deployment regime. In the inter-node EP-32 case, Dispatch latency falls with routing volume; in the intra-node EP-8 case it is effectively unchanged. Combine latency decreases in both settings but remains substantial because it includes inter-device synchronization and therefore reflects load imbalance in MoE computation.
+In an EP-32 GSM8K runtime sweep, the maximum per-device token--expert assignment volume---the synchronization-relevant critical-path load---falls to $0.68\times$ and $0.59\times$ of the baseline for the Lossless and Optimum policies, respectively. Relative skew can increase modestly because total work falls faster than the lightest device loads, but the absolute critical-path work decreases, consistent with the observed Combine-latency reduction.
 
 Overall, the components accelerated by Spec-K account for 80--90\% of the total verification latency, indicating that the method directly targets the dominant bottlenecks in the system. 
 These results demonstrate that routing sparsity introduced by Spec-K translates effectively into both computation and communication savings at the system level.
@@ -622,7 +628,7 @@ These results demonstrate that routing sparsity introduced by Spec-K translates 
 \centerline{\includegraphics[width=0.8\linewidth]{total_topk_vs_acc.pdf}}
 \caption{Acceptance rate versus average routing budget (Top-$k$) for Qwen3-30B-A3B with Qwen3-0.6B on ShareGPT.
 Each point corresponds to a policy selected from the Pareto frontier.
-Reducing the routing budget consistently increases acceptance, indicating improved alignment between draft and target models under adaptive allocation.}
+Lower routing budgets are associated with higher acceptance in this sweep.}
 \label{fig:topk_vs_acceptance}
 \end{figure}
 
@@ -631,15 +637,19 @@ In addition to reducing per-step latency, Spec-K also improves the efficiency of
 To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B. 
 Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
 
-As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate. 
-This suggests that more aggressive routing implicitly improves alignment between the draft and target models, allowing more draft tokens to be verified per step.
-
-This trend is opposite to conventional expectations that reducing model capacity harms alignment, highlighting the unique effect of adaptive allocation.
+As shown in Figure~\ref{fig:topk_vs_acceptance}, lower average Top-$k$ is consistently associated with higher acceptance in this sweep, allowing more draft tokens to be verified per step.
+This correlation is an empirical result rather than evidence that sparsification itself causes better alignment; the quality measurements below remain necessary to rule out policies that merely imitate the draft model at the target model's expense.
 
 This effect is complementary to system-level optimizations: while reduced routing lowers the cost of each verification step, higher acceptance increases the number of tokens processed per step. 
 Together, these factors contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
 
 \subsection{Quality--Efficiency Tradeoff and Generalization}
+
+\subsubsection{Comparison with Allocation Baselines}
+
+To isolate the value of the preview signal, we compare Spec-K with a fixed lower-layer policy suggested by the reviewers. This baseline reduces the first $n$ MoE layers to a constant $k$ and preserves the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, every tested lower-layer policy is dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at Top-$k$ 5.97. The strongest fixed-policy run scores 90.14 at Top-$k$ 5.73, while Spec-K scores 90.45 at the lower Top-$k$ of 5.45. Thus, unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack. These runs compare quality and routing budget only; they do not support a separate throughput claim.
+
+Lynx~\cite{gupta2024lynx}, a complementary batch-aware expert-remapping system, reports $1.14\times$ and $1.09\times$ throughput improvements at EP degrees 2 and 4, respectively, while keeping accuracy within one percentage point. These cross-paper numbers are not directly comparable because Lynx uses different models, deployment conditions, and target-side router signals. The controlled lower-layer comparison above therefore provides the more direct test of Spec-K's preview signal.
 
 \subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
@@ -661,7 +671,7 @@ Main configuration used throughout the paper
     \hfil
     \subfloat[{\parbox[c]{0.9\linewidth}{\centering
 Qwen3-30B-Instruct-2507, EAGLE, GSM8K \\
-Non-reasoning model a reasoning calibration
+Non-reasoning model on a reasoning calibration
 }}]{
         \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_gsm8k_cot.pdf}
     }
@@ -728,9 +738,9 @@ Overall, these results show that while the exact tradeoff curve varies across se
 
 \begin{table}[t]
 \centering
-\setlength{\tabcolsep}{8pt}
+\setlength{\tabcolsep}{5pt}
 \renewcommand{\arraystretch}{1.3}
-\caption{Cross-Task Accuracy Results of GSM8K-COT (Score / Top-$k$)}
+\caption{Cross-task transfer of policies calibrated on GSM8K-COT (score / Top-$k$).}
 \label{tab:transfer_accuracy}
 \begin{tabular}{lccc}
 \toprule
@@ -753,7 +763,7 @@ We next evaluate whether a routing policy selected on a calibration task transfe
 We take the Lossless and Optimum policies identified on GSM8K-COT for Qwen3-30B-A3B with Qwen3-0.6B, and evaluate their accuracy across multiple benchmarks. 
 Each result is averaged over five runs with different seeds to reduce evaluation variance.
 
-As shown in Table~\ref{tab:transfer_accuracy}, the Lossless policy consistently preserves accuracy across all tasks, indicating that conservative allocation strategies generalize well. 
+As shown in Table~\ref{tab:transfer_accuracy}, the Lossless policy remains within the observed variation or a negligible drop across tasks, indicating that conservative allocation strategies generalize well.
 The Optimum policy achieves additional efficiency gains, while maintaining strong performance on reasoning (BBH-COT) and code generation (HumanEval) tasks.
 
 However, on instruction-following tasks (IFEval), the Optimum policy exhibits a more noticeable degradation. 
@@ -817,18 +827,19 @@ In contrast, our method performs \emph{pre-execution} adaptation using preview s
 
 \section{Discussion and Conclusion}
 
-Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or incurring overhead.
+Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or adding a separate predictor or model pass.
 
-Our results point to a consistent phenomenon: reducing the routing budget can improve both efficiency and speculative acceptance. This suggests that MoE inference operates in a regime of \emph{excess capacity but imperfect utilization}, where activating more experts does not necessarily improve draft--target alignment. Instead, adaptive sparsification acts as an implicit regularizer, suppressing low-contribution experts and yielding more consistent predictions. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial redundancy for typical tokens, while a small subset of difficult tokens defines the capacity boundary. Spec-K exploits this asymmetry by reallocating resources toward high-uncertainty regions.
+Our results show that reducing the routing budget can improve efficiency and, at the evaluated operating points, coincide with higher speculative acceptance. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial routing redundancy for typical tokens, while a smaller subset of difficult tokens defines the quality boundary. Spec-K exploits this asymmetry by allocating larger budgets to high-uncertainty regions; we do not claim that sparsification causally improves draft--target alignment.
 
-This approach has several limitations. Its effectiveness depends on preview signal quality; mismatch between draft uncertainty and true difficulty can lead to suboptimal allocation. Different generation regimes also exhibit varying sensitivity: policies calibrated on reasoning tasks may be over-aggressive for instruction-following workloads. Finally, Spec-K operates at token-level granularity with a uniform policy across layers, leaving finer-grained control unexplored.
+This approach has two practical prerequisites: a sufficiently aligned draft--target pair and reducible routing redundancy in the target model and serving stack. Mismatch between draft uncertainty and true difficulty can lead to suboptimal allocation, while models with a small base Top-$k$ may offer little removable work. Different generation regimes also exhibit varying sensitivity: policies calibrated on reasoning tasks may be over-aggressive for instruction-following workloads. Finally, Spec-K operates at token-level granularity with a uniform policy across layers, leaving finer-grained control unexplored.
 
 These limitations suggest several directions. Richer preview signals (e.g., longer speculative windows) may better capture token difficulty. Extending allocation beyond token-level Top-$k$ to per-layer routing, attention sparsity, or other compute budgets would generalize RASP into a unified resource allocator. Further gains may also arise from co-design with scheduling, batching, and expert placement in distributed systems.
 
 More broadly, RASP suggests a shift in how inference efficiency is approached. Instead of treating computation as a fixed per-token budget to be optimized post hoc, it becomes a quantity that can be \emph{predicted and allocated on demand}. In this view, Spec-K represents one point in a larger design space of online, signal-driven inference methods, where efficiency emerges not from uniformly reducing computation, but from aligning it with the structure of the generation process itself.
 
-
-\newpage
+\section*{Acknowledgment}
+% CAMERA-READY TODO: Add verified sponsor/funding acknowledgments here.
+OpenAI Codex~\cite{openai2026codex} assisted with language editing and organization throughout the final manuscript. The authors independently verified all technical claims, data, and citations and take full responsibility for the content.
 
 % \section{Ease of Use}
 
