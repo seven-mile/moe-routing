@@ -1,0 +1,1051 @@
+\documentclass[conference]{IEEEtran}
+% \IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{threeparttable}
+\usepackage{tabularx}
+\usepackage{bm}
+\usepackage{todonotes}
+\usepackage[caption=false]{subfig}
+
+\theoremstyle{definition} % Sets style for subsequent \newtheorem commands
+\newtheorem{definition}{Definition}[section] % Numbered by section (e.g., 1.1)
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Spec-K: Adaptive Resource Allocation via Speculative Preview for Efficient MoE Inference}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+\and
+\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
+\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
+\textit{name of organization (of Aff.)}\\
+City, Country \\
+email address or ORCID}
+}
+
+\maketitle
+
+\begin{abstract}
+Inference serving for large language models (LLMs) often relies on static resource allocation---such as fixed Top-k routing in Mixture-of-Experts (MoE) models---despite substantial token-level heterogeneity. This mismatch causes systematic over-provisioning, magnified in long reasoning and batched speculative decoding.
+We introduce Resource Allocation via Speculative Preview (RASP), a framework that leverages predictive signals from a draft model to guide token-level allocation before target-model verification, enabling fine-grained adjustment of compute budgets to match instantaneous demand.
+As an instantiation, Spec-K applies RASP to MoE routing: it uses speculative preview to estimate token uncertainty and reallocates the Top-k budget dynamically via a minimalist policy, reducing expert computation, communication traffic, and activated expert count in batched verification---thereby improving throughput and even speculative acceptance.
+Experiments on distributed MoE inference show that Spec-K achieves up to 1.72× end-to-end throughput improvement over a strong baseline, with negligible accuracy loss on complex reasoning and instruction-following tasks.
+\end{abstract}
+
+\begin{IEEEkeywords}
+large language models, mixture-of-experts, speculative decoding, distributed inference
+\end{IEEEkeywords}
+
+\section{Introduction} \label{sec:introduction}
+
+Mixture-of-Experts (MoE) has become a mainstream architecture~\cite{shazeer2017outrageously,fedus2022switch,lepikhin2020gshard,jiang2024mixtral,dai2024deepseekmoe,sun2024hunyuan} for frontier large language models, powering many recent open and closed models~\cite{comanici2025gemini,liu2024deepseek,yang2025qwen3,achiam2023gpt,team2025kimi,zeng2025glm,chowdhery2023palm}. By activating only a small subset of experts for each token, MoE enables scaling model capacity without proportionally increasing computation. In practice, such efficiency relies on \emph{fixed resource allocation policies}, most commonly token choice Top-$k$ routing~\cite{lepikhin2020gshard}, where each token selects the same number of experts.
+
+Despite its simplicity and effectiveness, fixed resource allocation introduces a fundamental inefficiency. 
+Autoregressive decoding exhibits substantial \emph{token-level heterogeneity}: some tokens are highly predictable, while others require significantly more modeling capacity. 
+However, under fixed allocation, all tokens are assigned the same resource budget regardless of their difficulty. 
+In MoE models, this manifests as \emph{over-provisioning}, where easy tokens unnecessarily consume expert computation and incur communication overhead. 
+Under expert-parallel execution~\cite{lepikhin2020gshard} (where experts are distributed across devices), both FLOPs and dispatch/combine traffic scale approximately linearly with the routing budget, making this inefficiency particularly costly in distributed serving.
+
+This mismatch becomes more pronounced in real-world workloads. 
+In long reasoning tasks, token difficulty varies dramatically across the generation trajectory, amplifying the gap between required and allocated resources. 
+In addition, when MoE is combined with speculative decoding (SD)~\cite{leviathan2023spec,chen2023spec}, the problem manifests in a different form. 
+During batched verification, multiple candidate tokens activate different expert subsets, requiring the system to materialize their union, which weakens the memory-efficiency benefits of parallel verification. 
+Both phenomena reflect the same underlying issue: \emph{fixed resource allocation fails to match token-level heterogeneity}.
+
+A key observation is that this heterogeneity is not entirely latent. 
+Speculative decoding naturally exposes \emph{predictive signals} before verification, as the draft model produces token-level distributions for candidate tokens. 
+These signals, such as token entropy, provide a preview of token difficulty and are intrinsically aligned with the target model due to their shared language modeling objective. 
+This suggests a general principle: \emph{resource allocation should adapt to token-level demand, guided by preview signals available prior to computation}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{rasp_framework.pdf}
+\caption{\textbf{Resource Allocation via Speculative Preview (RASP) Framework.} 
+The framework consists of three components: (1) the draft model provides a \emph{preview signal} (e.g., uncertainty) for candidate tokens; 
+(2) an \emph{adaptive allocation policy} maps this signal to a resource allocation plan; 
+(3) the target model executes with the allocated resources, reducing waste on easy tokens. 
+This abstraction decouples preview generation from policy design, enabling flexible extension to other resources (e.g., attention sparsity, layer skipping).}
+\label{fig:rasp_framework}
+\end{figure}
+
+Based on this principle, we introduce \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive inference. 
+RASP decomposes the inference process into three components: (1) a \emph{preview signal} that estimates token difficulty, (2) a \emph{allocation policy} that maps this signal to a resource allocation plan, and (3) the \emph{adaptive target model execution} that realizes the allocation with speedup. 
+Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free and zero-overhead adaptation.
+This abstraction enables fine-grained, online adjustment of compute budgets, allowing systems to allocate more resources to difficult tokens while reducing waste on easy ones. 
+Beyond MoE routing, the framework naturally extends to other forms of adaptive computation, such as sparse attention or layer skipping.
+
+As a concrete instantiation of RASP, we propose \mbox{\textbf{Spec-K}}, a training-free dynamic Top-$k$ routing method for MoE inference. 
+Spec-K leverages speculative preview to estimate token uncertainty and assigns a token-wise routing budget accordingly. 
+By increasing Top-$k$ for uncertain tokens and reducing it for predictable ones, Spec-K implements a simple yet effective adaptive allocation mechanism during speculative verification. 
+The policy itself is minimalist---a piecewise constant function mapping perplexity to routing budget---making it both interpretable and easy to optimize.
+This design preserves model quality while reducing unnecessary expert activation.
+
+Such adaptive allocation yields multiple system-level benefits. 
+Reducing the routing budget directly lowers expert-side computation (FLOPs) and dispatch/combine communication. 
+At the same time, dynamically shrinking per-token expert sets reduces the union of activated experts across tokens in batched verification, improving memory locality and efficiency. 
+In practice, concentrating resources on uncertain tokens can also improve speculative acceptance rates, further amplifying throughput gains.
+
+In summary, we make the following contributions:
+
+\begin{itemize}
+    \item We propose \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive LLM inference. RASP addresses the fundamental misalignment between fixed resource allocation and token-level heterogeneity---a mismatch amplified in long reasoning and speculative decoding workloads---by leveraging preview signals to enable token-level adaptation before target computation. (Sec.~\ref{sec:method:rasp_framework})
+
+    \item We present \textbf{Spec-K} as a practical instantiation of RASP for MoE routing, using a simple and training-free policy to dynamically adjust Top-$k$ based on token uncertainty. (Sec.~\ref{sec:method:spec_k})
+
+    \item We provide analysis (Sec.~\ref{sec:mechanism}) and an automatic search procedure (Sec.~\ref{sec:method:autosearch}) to identify high-quality operating points under the quality–efficiency trade-off.
+
+    \item We demonstrate that Spec-K achieves up to $1.72\times$ end-to-end throughput improvement over a strong distributed MoE baseline, with negligible accuracy degradation on complex reasoning and instruction-following benchmarks. (Sec.~\ref{sec:evaluation})
+\end{itemize}
+
+
+\section{Background and Motivation}
+
+\subsection{Mixture-of-Experts and Serving}
+
+Mixture-of-Experts (MoE) replaces the dense feed-forward network in transformer layers with a set of $n$ experts, where only a sparse subset is activated for each token. 
+Given a token representation $\mathbf{x}_{L,i}$ at layer $L$, a gating function produces routing scores over expert $j$:
+\begin{equation*}
+\mathcal{G}_{L,i,j} = \operatorname{Gate}(\mathbf{x}_{L,i})_j.
+\end{equation*}
+Under token-choice routing~\cite{lepikhin2020gshard}, the Top-$k$ experts are selected, and their outputs are combined to form the layer output.
+
+In distributed inference, MoE layers are typically executed under an expert-parallel paradigm. The forward pass of a single MoE layer can be decomposed into four stages:
+\begin{itemize}
+    \item \textbf{Routing}: compute gating scores and select Top-$k$ experts for each token.
+    \item \textbf{Dispatch}: send token representations to the devices hosting the selected experts.
+    \item \textbf{Expert Computation}: including SiLU-Mul activation operation from SwiGLU~\cite{shazeer2020glu} and 2 GEMMs, often implemented with grouped general matrix multiplication (GroupGEMM~\cite{gale2023megablocks}) to improve hardware utilization.
+    \item \textbf{Combine}: the inverse operator of dispatch, gather and aggregate expert outputs back to the original token order.
+\end{itemize}
+
+Both dispatch and combine incur all-to-all communication across devices, while expert computation scales with the total number of token-expert assignments. 
+For a batch of tokens, the system workload depends on the set of activated experts across all tokens. Let $\mathcal{S}_{L,i}$ denote the selected experts for token $i$, and define the union:
+\begin{equation*}
+\mathcal{U}_L = \bigcup_i \mathcal{S}_{L,i}.
+\end{equation*}
+The size of $\mathcal{U}_L$ determines how many experts must be materialized during execution, directly impacting memory footprint, communication volume, and the efficiency of grouped execution.
+
+In practice, both communication cost and expert computation scale approximately linearly with the routing budget $k$, making Top-$k$ a key control knob for system efficiency.
+
+\subsection{Speculative Decoding}
+
+Speculative decoding (SD) accelerates autoregressive generation by using a lightweight draft model to propose multiple candidate tokens, which are then verified in parallel by a larger target model~\cite{stern2018blockwise,leviathan2023spec,chen2023spec}.
+
+At each decoding step, the draft model generates a sequence of $\gamma$ candidate tokens $\{S_1, \dots, S_\gamma\}$. The target model evaluates these tokens in a single forward pass, and accepts a prefix based on agreement between the draft and target distributions. The process then continues from the first rejected token.
+
+This procedure enables multiple tokens to be processed per target forward pass, improving efficiency when the acceptance rate is high. The benefit primarily comes from amortizing model execution and memory access across candidate tokens.
+
+During verification, the target model processes $1+\gamma$ tokens in parallel (including one carried-over token from the previous step). In MoE models, each of these tokens may activate a different subset of experts. As a result, the effective expert set becomes
+\begin{equation*}
+\mathcal{U}_L^{\text{SD}} = \bigcup_i \bigcup_{j=1}^{1+\gamma} \mathcal{S}_{L,(i,j)},
+\end{equation*}
+which can be significantly larger than that of a single token. This increases both communication overhead in dispatch/combine and reduces the efficiency of grouped expert execution.
+
+\subsection{Entropy, Perplexity, and Uncertainty}
+\label{sec:bg:uncertainty}
+
+The predictive distribution of a language model provides a intrinsic measure of uncertainty regarding the next token. 
+Given the model's output probability distribution $\mathbf{z}_i$ over the vocabulary $\mathcal{V}$ at step $i$, the Shannon entropy is defined as:
+\begin{equation*}
+H(\mathbf{z}_i) = -\sum_{w \in \mathcal{V}} P(w | \mathbf{z}_i) \log P(w | \mathbf{z}_i).
+\end{equation*}
+
+The corresponding token-level perplexity is derived as the exponential of the entropy:
+\begin{equation*}
+\text{PP}(\mathbf{z}_i) = \exp(H(\mathbf{z}_i)).
+\end{equation*}
+
+While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the "sharpness" of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
+
+\subsection{Long Reasoning and Token Heterogeneity}
+
+In long-form generation tasks such as chain-of-thought reasoning, token-level behavior exhibits substantial heterogeneity. 
+Sequences typically contain a mix of predictable tokens (e.g., formatting or intermediate steps) and high-uncertainty tokens that determine the direction of reasoning.
+
+Recent studies indicate that a relatively small fraction of tokens with high uncertainty plays a disproportionate role in shaping model outputs~\cite{wang2025beyond8020}. 
+At the same time, long reasoning workloads are dominated by decoding, making per-token efficiency a primary factor in overall system performance.
+
+This heterogeneity is reflected both in model behavior and in system workload, particularly in settings where multiple tokens are processed jointly, such as speculative decoding.
+
+\begin{figure*}
+    \centering
+    \includegraphics[width=1\linewidth]{workflow.pdf}
+    \caption{Overview of \textbf{Spec-K,} an instantiation of RASP for MoE dynamic Top-$k$. 
+A draft model provides preview signals that an allocation policy maps to a token-wise routing plan, enabling dynamic resource allocation during MoE verification. 
+This adaptive mechanism yields systematic speedups through reduced computation and communication.}
+    \label{fig:workflow}
+\end{figure*}
+
+\section{Methodology} \label{sec:methodology}
+
+\subsection{RASP: Resource Allocation via Speculative Preview} \label{sec:method:rasp_framework}
+
+We formalize \textbf{Resource Allocation via Speculative Preview (RASP)} as a general framework for adaptive inference under token-level heterogeneity. 
+Consider a verification step where the target model processes $1+\gamma$ tokens: one prefix token and $\gamma$ draft-generated candidates $S_1,\dots,S_\gamma$. 
+RASP introduces a preview-guided mechanism that allocates computation prior to target execution.
+
+\begin{definition}[Preview Signal]
+A \emph{preview signal} $\Psi$ is obtained from the draft model before target execution. 
+$\Psi$ encodes information about token-level difficulty and may take arbitrary structure. 
+Examples include per-token scalars (e.g., predictive entropy or perplexity), attention score matrices, router logits, or hidden states. 
+We treat $\Psi$ as an abstract signal to emphasize that allocation operates on its semantics rather than its representation.
+\end{definition}
+
+\begin{definition}[Allocation Policy]
+An \emph{allocation policy} $\mathcal{F}$ maps a preview signal $\Psi$ to an \emph{allocation plan} $\mathbf{A}$:
+\begin{equation}
+\mathbf{A} = \mathcal{F}(\Psi).
+\end{equation}
+The policy may exploit arbitrary structure in $\Psi$, including token-wise independence or cross-token interactions. 
+Crucially, $\mathcal{F}$ is decoupled from model parameters, enabling independent design and optimization.
+\end{definition}
+
+The output of $\mathcal{F}$ is an \emph{allocation plan} $\mathbf{A}$, which specifies how computational resources are distributed across tokens. 
+Its structure depends on the adaptation target: a vector of expert counts for MoE routing, a collection of layer subsets for early exit, or attention masks for sparse attention. 
+The target model interprets $\mathbf{A}$ to modulate per-token resource usage, while model weights remain unchanged.
+
+Executing with plan $\mathbf{A}$ incurs a system cost $\mathcal{C}(\mathbf{A})$, whose form depends on the resource being controlled. 
+Adaptive allocation seeks to minimize $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint.
+
+RASP thus defines a compositional design space along three axes: the choice of preview signal $\Psi$, the design of allocation policy $\mathcal{F}$, and the structure of the allocation plan $\mathbf{A}$. 
+In this work, we instantiate RASP for MoE routing using uncertainty-based preview signals, resulting in \textbf{Spec-K}.
+
+\subsection{Spec-K: A Dynamic Top-k Instantiation} \label{sec:method:spec_k}
+
+We instantiate RASP for MoE routing with \textbf{Spec-K}, a dynamic Top-$k$ allocation mechanism driven by speculative preview.
+This instantiation makes three concrete design choices for the RASP components.
+First, the \textbf{preview signal} $\Psi$ is instantiated as token-level uncertainty derived from the draft model, represented as a vector $\boldsymbol{\Psi} = (\psi_1,\dots,\psi_\gamma)$.
+Second, the \textbf{resource} being controlled is the routing budget in MoE layers---the Top-$k$ number of activated experts per token.
+Third, the \textbf{allocation policy} $\mathcal{F}$ produces a token-wise plan $\mathbf{A} = (\hat k_1,\dots,\hat k_{1+\gamma})$, where each $\hat k_i \in \{0,\dots,k\}$ specifies the budget for token $i$. We next elaborate on these choices.
+
+For each candidate token $S_i$, let $\mathbf{z}_i$ denote its predictive distribution from the draft model.
+We compute the preview signal as its perplexity:
+\begin{equation}
+\psi_i = \exp(H(\mathbf{z}_i)), \quad i = 1,\dots,\gamma.
+\end{equation}
+This choice of signal extracts a highly interpretable, compressed representation of token difficulty from the rich, high-dimensional information available in the draft model's forward pass (e.g., hidden states or attention patterns).
+We analyze the advantages of this uncertainty-based signal in Sec.~\ref{sec:mechanism}, showing that it provides a principled basis for allocation by identifying tokens where approximation is naturally more tolerable.
+
+The allocation policy then maps this signal vector $\boldsymbol{\Psi}$ to a resource allocation plan $\mathbf{A}$:
+\begin{equation}
+\mathbf{A} = \mathcal{F}(\boldsymbol{\Psi}) = (\hat k_1,\dots,\hat k_{1+\gamma}).
+\end{equation}
+
+Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer.
+For a token $t_i$ with hidden state $\mathbf{x}_{L,i}$ at layer $L$, the standard routing computes gating weights $\mathcal{G}_{L,i,j} = \operatorname{Norm}(\operatorname{TopK}(\operatorname{Gate}(\mathbf{x}_{L,i}), k))_j$.
+Spec-K applies a straightforward zero-masking based on the allocated budget $\hat k_i$:
+\begin{equation}
+\hat{\mathcal{G}}_{L,i,j} =
+\begin{cases}
+\mathcal{G}_{L,i,j}, & j\le\hat{k}_i\\
+0, & \text{otherwise}
+\end{cases}
+\end{equation}
+This modification ensures that tokens with a reduced budget $\hat k_i$ activate only the top $\hat k_i$ experts, leaving the rest unused without affecting the weight normalization of the active experts, if any.
+
+The benefits of this adaptive allocation are directly reflected in the system cost $\mathcal{C}(\mathbf{A})$.
+In MoE routing, both expert computation (FLOPs) and dispatch/combine communication scale approximately linearly with the number of activated experts.
+Consequently, the resource cost of a verification step satisfies $\mathcal{C}(\mathbf{A}) \propto \sum_i \hat k_i$.
+By reducing $\hat k_i$ for low-uncertainty tokens, Spec-K directly lowers both the computational load and the cross-device communication traffic during verification.
+
+In practice, this preview-guided allocation can also improve speculative acceptance 
+rates, further amplifying throughput gains, as we will show in our evaluation.
+
+This instantiation defines the interface and input-output behavior of the allocation policy $\mathcal{F}$.
+The detailed, structured design of this policy function is presented in the next section.
+
+\subsection{Allocation Policy Design} \label{sec:method:policy}
+
+The allocation policy $\mathcal{F}$ serves as the core component of Spec-K, governing the trade-off between model quality and system efficiency.
+While speculative decoding exposes a rich set of signals (e.g., attention patterns or routing logits), we adopt a \emph{minimal and structured design} that directly maps token uncertainty to routing sparsity.
+
+Specifically, we implement $\mathcal{F}$ as a \textit{preview-to-prefix allocation}: 
+the uncertainty of each candidate token determines the routing budget of its preceding 
+context token---the one from which it was drafted.
+Let $f(\psi_i)$ denote the \textit{per-step policy} that maps a single preview signal 
+to a routing budget. The overall allocation is then defined by applying $f$ 
+to each candidate's preview, with a shift:
+\begin{equation}
+\mathcal{F}(\boldsymbol{\Psi}) := (f(\psi_1),\; f(\psi_2),\; \dots,\; f(\psi_\gamma),\; k)
+\end{equation}
+The final token is assigned the default budget $k$, as its preview signal is not 
+available prior to verification.
+
+We parameterize the per-token function $f(\cdot)$ as a \textit{piecewise constant function} over the uncertainty signal $\psi_i$:
+\begin{equation}
+f(\psi_i) :=
+\begin{cases}
+k, & \psi_i \ge a_k, \\
+k-1, & \psi_i \ge a_{k-1}, \\
+\quad \vdots \\
+1, & \psi_i \ge a_1, \\
+0, & \text{otherwise},
+\end{cases}
+\end{equation}
+where the thresholds are monotonic and satisfy:
+\begin{equation}
+a_1 \le a_2 \le \cdots \le a_k.
+\label{eq:monotonicity}
+\end{equation}
+
+This parameterization defines a compact yet expressive policy space.
+It is motivated by three considerations:
+\begin{itemize}
+    \item \textbf{Simplicity}: the policy is low-dimensional and easy to find a near-optimal allocation rule.
+    \item \textbf{Coverage}: it spans a wide range of behaviors, from static Top-$k$ to aggressively sparse routing.
+    \item \textbf{Interpretability}: the piecewise constant form yields an explicit, rule-like mapping from preview signal to allocation decision, making the behavior easy to reason about.
+\end{itemize}
+
+The monotonicity constraint enforces that higher-uncertainty tokens receive more experts, which improves stability while only mildly restricting expressiveness.
+
+Given this parameterization, the remaining question is how to select an optimal policy under the quality–efficiency trade-off.
+We address this via an automatic search procedure described next.
+
+\subsection{Policy Optimization} \label{sec:method:autosearch}
+
+Selecting the thresholds in $f(\cdot)$ determines how routing sparsity adapts to token uncertainty, and thus directly controls quality and efficiency.
+This defines a search function that maps policy to (quality, speed), and induces a two-objective optimization problem over these two metrics.
+Its solution is characterized by a Pareto frontier, which exposes a diverse set of operating points, allowing users to select a policy that matches their desired trade-off.
+
+The search is performed over the threshold parameters $\{a_i\}$ in $f(\cdot)$, which carry the monotonicity constraint in Eq.~(\ref{eq:monotonicity}).
+To optimize over this constrained space, we reparameterize $\{a_i\}$ using
+$b_i = a_i / a_{i+1} \in [0, 1]$, yielding a set of bounded and independent variables; the ordering of $\{a_i\}$ is then ensured by construction.
+
+We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
+Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
+
+In practice, we use a low-dimensional parameterization (typically 5--6 parameters for $k=8$ by disabling the leading over-aggressive positions), which keeps the search efficient; the overall cost is dominated by model inference during evaluation.
+
+We note that for architectures with built-in redundancy, such as models with shared 
+experts, allocation policies with aggressively low Top-$k$ may be achievable without 
+quality degradation. An instance of this (DeepSeek-R1 w/ MTP) is shown in our evaluation 
+(Sec.~\ref{sec:evaluation:pareto}).
+
+\subsection{Operating Principles of Spec-K}
+\label{sec:mechanism}
+
+Beyond its routing rule, Spec-K exhibits a special system-level behavior: it applies approximation when decoding is naturally tolerant, and becomes more conservative as uncertainty increases.
+This subsection develops a mechanistic account of that behavior.
+
+A full end-to-end perturbation analysis of modern transformers would be intractable and offer limited insight, given the highly nonlinear interaction among attention, MLP, and residual connections.
+We therefore focus on two tractable views of the same behavior: a per-step view based on \emph{local sensitivity} in auto-regressive decoding, and a sequence-level view based on \emph{self-regulation} under uncertainty-aware routing.
+
+\subsubsection{Local Sensitivity of Auto-Regressive Decoding}
+
+Spec-K is most aggressive when the current decoding step is predicted to be easy, namely when the speculative candidate has low perplexity.
+This choice can be understood through a basic robustness property of auto-regressive decoding.
+
+Consider decoding step $t$ under greedy generation.
+Let $\mathbf{z}_t \in \mathbb{R}^{V}$ denote the full-model logits over the vocabulary, and let
+$
+y_t^\star = \arg\max_i \mathbf{z}_t(i)
+$
+denote the selected token.
+Suppose reduced routing induces an effective perturbation to the logits, yielding approximate logits
+$
+\hat{\mathbf{z}}_t = \mathbf{z}_t + \Delta_t.
+$
+Define the top-1 margin of the full model as
+\begin{equation}
+m_t = \mathbf{z}_t(y_t^\star) - \max_{j \neq y_t^\star} \mathbf{z}_t(j).
+\end{equation}
+If the perturbation satisfies
+$
+\|\Delta_t\|_\infty < \frac{m_t}{2},
+$
+then the greedy decision is preserved, i.e.,
+$
+\arg\max_i \hat{\mathbf{z}}_t(i) = y_t^\star.
+$
+
+In practice, low-perplexity tokens tend to have more peaked next-token distributions, so the same routing reduction is less likely to change the selected token.
+Although we illustrate this mechanism using greedy decoding, the underlying idea is not specific to argmax.
+
+\subsubsection{Sequence-Level Self-Regulation}
+
+The per-step view explains why low-perplexity tokens can tolerate stronger approximation.
+At the sequence level, the key effect is dynamic: stronger approximation at one step tends to induce more conservative routing in later steps.
+
+Let $P_t$ denote the perplexity-derived signal used by the policy function in Sec.~\ref{sec:method:policy}, and let the routing budget be written as
+$
+\hat{k}_t = f(P_t),
+$
+where $f(\cdot)$ is monotone non-decreasing.
+Higher perplexity therefore leads to more conservative routing.
+
+Empirically, stronger Top-$k$ reduction tends to increase approximation error and to raise predictive perplexity in subsequent decoding steps.
+At a coarse level, this gives the qualitative dependency
+\begin{equation}
+\hat{k}_t \downarrow \quad \Longrightarrow \quad P_{t+1} \uparrow.
+\end{equation}
+Combined with the monotonic policy,
+\begin{equation}
+P_{t+1} \uparrow \quad \Longrightarrow \quad \hat{k}_{t+1} = f(P_{t+1}) \uparrow,
+\end{equation}
+this yields a negative-feedback pattern across tokens:
+if routing is temporarily too aggressive, the resulting rise in perplexity pushes later steps toward larger Top-$k$, reducing approximation in subsequent steps.
+
+This is a qualitative abstraction of the behavior observed in practice rather than a formal control-theoretic model. From a systems perspective, Spec-K dynamically adapts routing budget online according to the model's own previewed difficulty.
+
+Taken together, these two views explain how preview-guided allocation maintains 
+quality: the per-step sensitivity analysis shows when approximation is safe, while 
+sequence-level self-regulation ensures that aggressive sparsification does not 
+propagate unchecked.
+
+\section{Implementation Details}
+
+We demonstrate the practicality of Spec-K by describing its integration into existing LLM serving systems. The implementation is lightweight, requiring minimal code changes while delivering measurable performance gains. We detail three aspects: integration scope, efficient execution of the allocation policy, and kernel-level adaptations for adaptive computation.
+
+\subsection{Integration Scope}
+
+To validate the generality of our approach, we implement Spec-K across four representative frameworks spanning research prototypes and production serving systems: HuggingFace Transformers with assisted generation~\cite{gante2023assistedgeneration}, Eagle~\cite{li2024eagle}, vLLM~\cite{kwon2023efficient}, and vLLM-Ascend~\cite{huawei2024vllmascend}. 
+
+A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
+
+% \subsection{Vectorized Policy Execution}
+
+% In serving systems that employ continuous batching~\cite{yu2022orca}, allocation policies must be computed per request. A naïve implementation would launch a separate kernel for each request's piecewise policy evaluation, incurring significant kernel launch overhead and potential host--device synchronization stalls. To eliminate this overhead from the critical path, we fuse the entire policy computation into a single Triton~\cite{tillet2019triton} kernel that operates over all tokens in the batch concurrently. With this vectorized implementation, policy calculation accounts for less than $0.1\%$ of total execution time in typical deployment configurations.
+
+\subsection{Adaptive Kernel Support}
+
+Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert, and we observe no significant degradation in load balance under Spec-K's adaptive routing budgets.
+
+The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. When routing budgets vary across tokens under Spec-K, this fixed partitioning leads to warp-level imbalance. We augment the workload partitioning with adaptive rebalancing that accounts for per-token budget variations. Microbenchmarks confirm that this adjustment brings observed communication latency into closer alignment with the theoretical reduction in communication volume.
+
+\section{Evaluation} \label{sec:evaluation}
+
+We evaluate Spec-K along two axes:
+(1) end-to-end system performance, and
+(2) generality across models, drafting methods, and tasks.
+
+We first demonstrate that Spec-K consistently improves throughput under realistic serving configurations. We then attribute these gains to three factors: reduced computation, reduced communication, and improved speculative acceptance. Finally, we show that these benefits generalize across diverse model families and tasks, and that policies selected on a calibration task transfer well to other downstream workloads.
+
+\begin{figure*}[t]
+    \centering
+
+    \includegraphics[width=0.5\textwidth]{main_res/legend.pdf}
+
+    \par\medskip
+
+    \vspace{-0.5cm}
+
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering Qwen3-30B-A3B (EP=8)}}]{
+        \includegraphics[width=0.31\textwidth]{main_res/30b_ep8_throughput.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering Qwen3-30B-A3B (EP=32)}}]{
+        \includegraphics[width=0.31\textwidth]{main_res/30b_ep32_throughput.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering Qwen3-235B-A22B (EP=32)}}]{
+        \includegraphics[width=0.31\textwidth]{main_res/235b_ep32_throughput.pdf}
+    }
+
+    \caption{
+        End-to-end throughput on ShareGPT under different model scales and expert parallelism (EP) configurations.
+        Spec-K consistently improves throughput over SpecDecode, achieving up to $1.72\times$ speedup.
+        The gain becomes more pronounced at larger batch sizes and higher EP degrees, where communication and load imbalance dominate.
+        The Lossless and Optimum policies are selected from the Pareto frontier of Qwen3-30B-A3B with Qwen3-0.6B, with average routing budgets $k=5.35$ and $k=4.91$, respectively.
+    }
+    \label{fig:throughput_end2end}
+\end{figure*}
+
+\subsection{Experimental Setup}
+
+We evaluate Spec-K across a large design space spanning models, drafting methods, tasks, and system configurations. 
+We therefore select representative settings that isolate key factors and reflect realistic serving scenarios.
+
+\subsubsection{System Configuration}
+
+Experiments are conducted on a multi-node GPU cluster with 8 NVIDIA H20 GPUs per node (96\,GB memory), connected via NVLink within each node and an NDR InfiniBand fabric across nodes. Each node is equipped with a 400\,Gb/s NVIDIA ConnectX-7 NIC.
+
+We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$k$, where attention layers use DP-$k$ and MoE experts are partitioned across $k$ devices.
+
+Our implementation is based on vLLM~v0.16.0 with Triton-based GroupGEMM kernels and DeepEP in low-latency mode (IBGDA). Prefix caching is disabled to ensure consistent performance and accuracy measurement. Speculative decoding uses padded drafter batches to minimize scheduling overhead. All methods, including the baseline, share the same system stack for fair comparison.
+
+\subsubsection{Models and Drafting Methods}
+
+We evaluate across multiple model families, including Qwen3, DeepSeek, and GLM, covering scales from 30B to 671B parameters and both shared and non-shared expert architectures.
+
+We consider three types of drafting methods: (1) small standalone language models, (2) EAGLE~\cite{li2024eagle} components, and (3) multi-token prediction (MTP~\cite{gloeckle2024better}). Unless otherwise specified, we use a speculation length of $\gamma = 3$, which is typical in practical deployments.
+
+\subsubsection{Workloads and Tasks}
+
+We evaluate both system performance and output quality using diverse generative workloads.
+
+For system-level throughput, we use the ShareGPT dataset with vLLM's online serving benchmark, which reflects realistic conversational workloads.
+
+For quality evaluation and policy calibration, we consider multiple task categories: (1) reasoning tasks (GSM8K-COT~\cite{cobbe2021gsm8k}, BBH-COT~\cite{suzgun2023bbh}), (2) code generation (HumanEval~\cite{chen2021humaneval}), and (3) instruction following (IFEval~\cite{zhou2023ifeval}). These tasks cover distinct generation regimes with different token-level characteristics, enabling a comprehensive assessment of adaptive allocation.
+
+\subsubsection{Metrics}
+
+We report end-to-end throughput (tokens per second) as the primary system metric. For speculative decoding, we measure the acceptance rate, defined as the ratio of accepted draft tokens to total proposed tokens.
+
+We also evaluate weak scaling efficiency to assess distributed performance:
+\[
+\text{Efficiency} = \frac{\text{Throughput on } N}{\text{Throughput on } M \times (N/M)} \times 100\%.
+\]
+
+Unless otherwise specified, we fix all dimensions and vary a single factor (e.g., batch size or EP degree) to isolate system-level effects.
+
+% End to End system perf: How fast are we? Does it scale?
+%   实验方法：使用 ShareGPT 数据集，vLLM 自带的 online serving benchmark 功能，控制并发请求数（max concurrency）以控制 Global Batch Size(EP8 64~1024, EP32 256~4096)，固定最大生成长度 1024（足以冲淡 Prefill 开销），使用 DeepEP 和 Triton Experts 实现的 MoE 算子，对不同模型组合（草稿模型都是 Qwen3-0.6B，目标模型有 Qwen3-30B-A3B 和 Qwen3-235B-A22B）、EP大小(EP8, EP16, EP32)的部署进行吞吐压测，统计最终吞吐和过程中的所有 token 的平均 topk 。（end2end主图只放了三个配置）
+%   Ans: 1.44-1.72x throughput improvements. More pronounced when using bigger global batch sizes, or bigger EP degrees. 额外分析：Weak scaling efficiency: Spec-K optimum > Spec-K lossless > specdecode baseline.
+% 
+% Where does the gain come from?: Literally.
+%   实验方法：1) latency breakdown 使用离线推理，一次性打入所有请求，从而使得 prefill 优先跑。对 30B EP8 使用 GBS=1024，对 235B EP32 使用 GBS=2048。控制 decode 32 个 token，做 profile，并从结果中统计纯 decode step 中所有受关心 kernel 的执行时间的平均值，算出相对比例。对比 SpecDecode baseline 和 Optimum policy 的 latency 差异，绘制出了 latency breakdown 图。
+%   2) 取出 Qwen3-30B-A3B 在 GSM8K-COT 和 IFEval 上搜索出的 Pareto Frontiers 点，它们的 k 值几乎能离散地 cover 我们关心的大部分策略的 k 值，以它们为基础，在 ShareGPT 数据集上运行最大生成长度为1024的生成任务，统计这期间的平均 k 值作为横坐标，投机接受率作为纵坐标，画出散点图。可以发现随着 k 降低，策略变得激进的同时，草稿模型和带 RASP(resource allocation via speculative preview) 的目标模型的对齐度越来越高，并呈指数状增长，基础投机有 
+%   Ans: The latency breakdown shows that our method(optimum policy) have near-theoretical speedup per verification step: 69.0% on 30B-A3B EP8, 67.0% on 235B-A22B EP32. In the component-level view, the components that Spec-K accelerates on occupy 80-90% of the total latency. (To prove that we are optimizing the bottlenecks of the system.) 
+%        注：这部分依然是 ShareGPT 数据集，于是 k 值也是 5.35 / 4.91 ，而 base top k 是 8
+%        并且 GroupGEMM 出现超出 $\sum \hat k / k$ 理论预估的加速，这和 GroupGEMM 本身的复杂存算特性有关。通信上， Dispatch 展现出接近    ，而 Combine 实际上包含了 GPU 间同步的开销，于是比 Dispatch 长很多，这同时也显示 Spec-K 对 EP 负载均衡的影响：EP8 情形下，Combine 几乎砍半，这意味着计算上的负载不均由于计算本身的加速而缓解了。EP32 情形下，Combine 依然有 16.47% 的延迟降低，这意味着同步开销确实较大，通信的加速被弱化了一部分。
+% Generality of Spec-K, via Pareto Frontier: Could Spec-K adapts different target-draft-task combinations? (task here refers to calibration task for search)
+% 实验方法：在6个 target-draft-calibration 三元组上测试了搜索结果，具体搜索就是把 lm-evaluation-harness 的评估流程接进搜索程序，然后让评估请求打到我们的推理服务vLLM上。target 包含 Qwen, DeepSeek, GLM 三个模型族，其中涉及了 Thinking 模型和 Non-thinking 模型（Qwen3-30B-Instruct-2507），draft 包含同模型族的独立投机模型、Eagle、MTP 三种变体技术，calibration dataset 包括 GSM8K-COT 的 reasoning 场景 和 IFEval 的指令遵循场景。
+
+% 具体配置如下表
+% | Target Model                | Draft Model | Calibration Dataset | Think? | Shared Experts? | Num Experts | Base Top-k | Comment                                    |
+% | --------------------------- | ----------- | ------------------- | ------ | --------------- | ----------- | ---------- | ------------------------------------------ |
+% | Qwen3-30B-A3B               | Qwen3-0.6B  | GSM8K-COT           | Y      | 0               | 128         | 8          | The main case used in previous experiments |
+% | Qwen3-30B-A3B-Instruct-2507 | Eagle3      | GSM8K-COT           | N      | 0               | 128         | 8          | Non-reasoning model with a reasoning tas   |
+% | Qwen3-30B-A3B-Instruct-2507 | Eagle3      | IFEval              | Y      | 0               | 128         | 8          | Instruction following performance          |
+% | Qwen3-30B-A3B               | Eagle3      | GSM8K-COT           | Y      | 0               | 128         | 8          | Ablation between draft model and Eagle3    |
+% | DeepSeek-R1 (671B)          | MTP         | GSM8K-COT           | Y      | 1               | 128         | 8          | Top-level model with shared experts        |
+% | GLM-4.7-Flash (30B)         | MTP         | GSM8K-COT           | Y      | 1               | 64          | 4          | 30B model with MTP and k = 4               |
+% 我不希望这个表比我的结果图还要显眼，我的选择是将这新关键信息融进图的 subcaption 里，只把大家关心的 diff 给拉出来浓缩成一句话，也就是 comment 里写得东西放到了图的 subcaption 里。
+
+% 实验分析和结论：
+% 提一下图中的标记，否则读者可能没意识到：灰色区域代表 baseline 的分数波动区域，蓝色线条代表搜索出的 topk-accuracy pareto frontier。点越靠近左上角越好。
+% 首先对比 1 和 4 （要有 \ref），说 Ablation between draft model and Eagle3 ，图里证明换用不同的 speculator 能搜出大体类似的 pareto frontiers，找到非常好的 operating points，说明一般的草稿模型技术都适用于 Spec-K 。具体来讲 1 是我们贯穿全线的 case 的搜索图，前面的 acceptance 实验也是用它测的。1 里面额外标记了两个点：Lossless 和 Optimum 两个策略在 pareto frontier 上的位置：Lossless 取自分数完全不降的区域的最佳点，也是 frontier 上 k 最大的点。Optimum 取在精度悬崖之前：精度平台区域的最后一个点。
+% 其次说 Non-thinking 模型搜索的结果：在需要 reasoning 的 GSM8K-COT 上表现特别好，在进入 k 略低于 5 的精度悬崖之前，几乎看不到精度损失，frontier 呈现漂亮的 \Gamma 型。而对于指令遵循任务 IFEval ，frontier 要平缓许多，想要维持精度没有损失，几乎最多也就把 $k$ 降低到 5.8 左右，再低的话，精度会平滑地缓慢下降，拉出一条漂亮的山脊线。这告诉我们也许应该对思考部分和回答部分采用不同的 allocation policy ，也意味着搜索器成功而充分地捕获到了任务间的细微差别。
+% 最后是新型技术/结构的探索式搜索case：两个采用 MTP 草稿 + 带共享专家的目标模型的 Case。其中顶级模型 DeepSeek-R1 展现出极强的冗余，我们 Spec-K 提供的 resource allocation 得以大大削减其计算通信，直到 $k=3.30$ 都观测不到任何精度损失——甚至还有分数提高的征兆。但是降低到接近 $k=2$ 时精度会迅速崩溃。而短小精悍的 30B 模型 GLM-4.7-Flash 采用 $k=4$ 这一配置，它虽然有共享专家，但依然没有呈现出巨大的冗余，而是在 k 降低到接近 3 时就会面临一次精度 degradation ，体现出 Spec-K 方法并没有魔法，对具有较小 $k$ 的模型的优化潜力并不充分。
+
+% Generality of Spec-K, via Cross task Accuracy Evaluation: Could the policy found by policy optimization procedure transfer to other tasks? (Does it have calibration offset? If any, how much?)
+%   Ans: The searched policy calibrated on GSM8K performs good on other complex reasoning tasks like BBH-COT and code generation tasks like HumanEval, but exhibits a bit of aggressiveness on instruction-following tasks e.g. IFEval. It's basically because IFEval requires turning off thinking mode. Conclusion: The reasoning part of the model output has different distribution from the answer part / instruction following part. We may adopt different policies on them to get even better performance in practice.
+% 上面的 Ans 是之前写的，其内容基本上可以和前文中 Qwen3-30B-Instruct-2507 模型在 IFEval 上的表现形成对应：GSM8K-COT 上的策略和 IFEval 上的策略本就不太一样，我们的解释是它们处于不同阶段：thinking mode 和 answer mode / instruct following mode，确实两个阶段它们的 token entropy distribution 也会不同。
+% 实验方法：还是之前在 pareto frontier 子图 1 中选出来的 lossless / optimum 策略（自然模型setup也继承那边），它们是 GSM8K-COT 搜出来的，我们测试这两个策略在多种数据集下的精度表现。由于评估本身有些微波动，我们每个数据做5次评估并取平均。
+% 我们发现：在类似的 reasoning 数据集（BBH-COT）上，或者代码生成数据集（HumanEval）上，Spec-K 都表现出很好的跨任务泛化能力。在指令遵循数据集 IFEval 上，Lossless 策略有 negligible accuracy loss(-0.4)，但 Optimum 则有较大的性能损失(-3.51)，暗示这二者是属于不同阶段的任务，展示了对不同阶段（think/non-think)应用不同策略，从而得到全局更优解的可能。
+
+\subsection{End-to-End System Performance} \label{sec:evaluation:end2end}
+
+We evaluate end-to-end throughput using the ShareGPT dataset with vLLM's online serving benchmark. 
+We control the global batch size via the maximum number of concurrent requests, and fix the maximum generation length to 1024 tokens to amortize prefill cost. 
+We consider Qwen3-30B-A3B and Qwen3-235B-A22B as target models, paired with Qwen3-0.6B as the draft model, under different expert parallelism (EP) configurations. 
+Throughput is measured as tokens per second over the entire serving process.
+
+Figure~\ref{fig:throughput_end2end} shows that Spec-K consistently improves throughput across all batch sizes and system configurations. 
+The Lossless and Optimum policies achieve up to $1.44\times$ and $1.72\times$ speedup over the SpecDecode baseline, respectively. 
+Notably, the improvement holds across both model scales and EP degrees, indicating that the benefit is robust to system and model variations.
+
+The gain becomes more pronounced at larger batch sizes and higher EP degrees. 
+In these regimes, system performance is increasingly dominated by communication overhead and load imbalance across experts. 
+By reducing the per-token routing budget, Spec-K directly alleviates both effects, leading to larger relative speedups under high-throughput, highly distributed settings.
+
+To further evaluate scalability, we measure weak scaling efficiency by fixing the per-device batch size while increasing the degree of expert parallelism. 
+As shown in Table~\ref{table:scaling_performance}, Spec-K consistently achieves higher scaling efficiency than the baseline, with larger gains at higher parallelism levels. 
+This suggests that Spec-K not only improves single-node efficiency, but also mitigates distributed inefficiencies that arise at scale.
+
+\begin{figure}[!t]
+    \centering
+
+    \includegraphics[width=0.6\linewidth]{latency_breakdown/legend.pdf}
+
+    \vspace{-4mm}
+
+    \subfloat[Qwen3-235B-A22B (EP=32)]{
+        \includegraphics[width=0.8\linewidth]{latency_breakdown/235b_ep32.pdf}
+        \label{fig:235b_ep32}
+    }
+
+    \vspace{-4mm}
+
+    \subfloat[Qwen3-30B-A3B (EP=8)]{
+        \includegraphics[width=0.8\linewidth]{latency_breakdown/30b_ep8.pdf}
+        \label{fig:30b_ep8}
+    }
+
+    \caption{Latency breakdown of the verification step for SpecDecode and Spec-K (Optimum policy).
+Spec-K reduces latency across all major components, including computation (GroupGEMM) and communication (Dispatch and Combine).
+The reduction closely follows the decrease in routing budget, with additional gains from improved kernel efficiency.}
+    \label{fig:overall_latency_breakdown}
+\end{figure}
+
+\begin{table}[!t]
+\renewcommand{\arraystretch}{1.2}
+\caption{Weak-scaling efficiency comparison.}
+\label{table:scaling_performance}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Configuration} & \textbf{30B EP 8 $\rightarrow$ 32} & \textbf{235B EP 16 $\rightarrow$ 32} \\
+ & (Local BS 64) & (Local BS 128) \\
+\midrule
+SpecDec Baseline & 58.0\% & 88.5\% \\
+Spec-K Lossless & 71.3\% & 92.5\% \\
+Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Where Does the Gain Come From?}
+
+\subsubsection{Latency Breakdown}
+
+To understand the source of the end-to-end speedup, we analyze the latency of the verification step, which dominates autoregressive decoding under speculative execution.
+
+We profile the decoding of 32 tokens under offline inference with simultaneous request issuance to minimize scheduling effects. Two representative settings are considered: (1) Qwen3-30B-A3B with EP=8 at global batch size 1024 (intra-node), and (2) Qwen3-235B-A22B with EP=32 at global batch size 2048 (inter-node).
+
+Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K consistently reduces latency across all major components. GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
+
+Communication overhead is also reduced. Dispatch latency closely follows the reduction in routing volume, while Combine latency improves more moderately. Notably, Combine latency substantially exceeds Dispatch latency in both settings, primarily due to inter-GPU synchronization, reflecting the overhead induced by load imbalance in MoE computation. The observed reduction in Combine latency indicates that Spec-K does not degrade EP load balance.
+
+Overall, the components accelerated by Spec-K account for 80--90\% of the total verification latency, indicating that the method directly targets the dominant bottlenecks in the system. 
+These results demonstrate that routing sparsity introduced by Spec-K translates effectively into both computation and communication savings at the system level.
+
+\subsubsection{Effect on Acceptance Rate}
+
+% figure: topk vs acceptance
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.8\linewidth]{total_topk_vs_acc.pdf}}
+\caption{Acceptance rate versus average routing budget (Top-$k$) for Qwen3-30B-A3B with Qwen3-0.6B on ShareGPT.
+Each point corresponds to a policy selected from the Pareto frontier.
+Reducing the routing budget consistently increases acceptance, indicating improved alignment between draft and target models under adaptive allocation.}
+\label{fig:topk_vs_acceptance}
+\end{figure}
+
+In addition to reducing per-step latency, Spec-K also improves the efficiency of speculative decoding by increasing the acceptance rate.
+
+To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B. 
+Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
+
+As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate. 
+This suggests that more aggressive routing implicitly improves alignment between the draft and target models, allowing more draft tokens to be verified per step.
+
+This trend is opposite to conventional expectations that reducing model capacity harms alignment, highlighting the unique effect of adaptive allocation.
+
+This effect is complementary to system-level optimizations: while reduced routing lowers the cost of each verification step, higher acceptance increases the number of tokens processed per step. 
+Together, these factors contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
+
+\subsection{Quality--Efficiency Tradeoff and Generalization}
+
+\subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
+
+% figure: pareto frontiers of 6 settings
+
+\begin{figure*}[t]
+    \centering
+
+    \includegraphics[width=0.475\textwidth]{pareto/legend.pdf}
+
+    \vspace{-0.2cm}
+    
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+Qwen3-30B-A3B, Qwen3-0.6B, GSM8K \\
+Main configuration used throughout the paper
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/30b_0b6_gsm8k_cot.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+Qwen3-30B-Instruct-2507, EAGLE, GSM8K \\
+Non-reasoning model a reasoning calibration
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_gsm8k_cot.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+Qwen3-30B-Instruct-2507, EAGLE, IFEval \\
+Instruction following calibration
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/30b_2507_eagle3_ifeval.pdf}
+    }
+
+    % \vspace{0.2cm}
+
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+Qwen3-30B-A3B, EAGLE, GSM8K \\
+Ablation on drafting method
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/30b_eagle3_gsm8k_cot.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+DeepSeek-R1, MTP, GSM8K \\
+Large model with shared experts
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/r1_mtp_gsm8k_cot_8d_apply_last.pdf}
+    }
+    \hfil
+    \subfloat[{\parbox[c]{0.9\linewidth}{\centering
+GLM-4.7-Flash, MTP, GSM8K \\
+Limited routing redundancy for $k=4$
+}}]{
+        \includegraphics[width=0.31\textwidth]{pareto/glm47flash_mtp_gsm8k_cot.pdf}
+    }
+
+    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline.
+All settings exhibit a consistent tradeoff structure: a plateau region with negligible quality loss followed by a sharp degradation beyond a critical routing threshold.
+Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
+    \label{fig:frontiers}
+\end{figure*}
+
+
+We analyze the quality--efficiency tradeoff of Spec-K across diverse model architectures, drafting methods, and tasks.
+
+Figure~\ref{fig:frontiers} presents Pareto frontiers for six representative configurations spanning three model families (Qwen, DeepSeek, GLM), different drafting methods (standalone, EAGLE, and MTP), and both reasoning and instruction-following tasks.
+
+Across all settings, we observe a consistent tradeoff structure: a plateau region where quality remains nearly unchanged as the Top-$k$ decreases, followed by a sharp degradation beyond a critical threshold. 
+Spec-K identifies operating points along this frontier, including a \emph{lossless} region within the plateau and an \emph{optimal} point near the onset of the degradation cliff.
+
+We further examine how this structure varies across different dimensions. 
+First, comparing Figure~\ref{fig:frontiers}(a) and (d), we find that replacing the draft model with EAGLE yields a similar frontier shape and comparable optimal operating points, indicating that Spec-K is largely insensitive to the choice of drafting method.
+
+Second, the frontier shape depends on the generation regime. 
+For reasoning tasks such as GSM8K-COT, the plateau region is wide and exhibits a sharp transition, suggesting substantial redundancy in expert allocation. 
+In contrast, for instruction-following tasks (IFEval), the frontier becomes smoother, with quality degrading gradually as the routing budget decreases. 
+This reflects differences in token-level characteristics across decoding phases, where instruction-following requires stricter structural fidelity.
+
+Finally, the degree of redundancy varies with model capacity and architecture. 
+For example, DeepSeek-R1 exhibits a large lossless region, tolerating aggressive reductions in routing budget without quality degradation, whereas GLM-4.7-Flash shows a much narrower margin due to its smaller base Top-$k$. 
+This indicates that the effectiveness of adaptive allocation depends on the inherent redundancy of the model.
+
+Overall, these results show that while the exact tradeoff curve varies across settings, its structural pattern remains consistent, enabling Spec-K to reliably identify high-quality operating points across diverse scenarios.
+
+\subsubsection{Cross-Task Transfer of Allocation Policies}
+
+\begin{table}[t]
+\centering
+\setlength{\tabcolsep}{8pt}
+\renewcommand{\arraystretch}{1.3}
+\caption{Cross-Task Accuracy Results of GSM8K-COT (Score / Top-$k$)}
+\label{tab:transfer_accuracy}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Dataset} & \textbf{Baseline} & \textbf{Lossless} & \textbf{Optimum} \\
+\midrule
+GSM8K-COT {\scriptsize (Calibration)} & 90.17 / 8 & 89.86 / 5.72 & 89.09 / 5.16 \\
+
+BBH-COT & 70.29 / 8 & 71.17 / 5.86 & 72.67 / 5.32 \\
+
+IFEval {\scriptsize (Prompt Strict)} & 82.81 / 8 & 82.44 / 5.31 & 79.30 / 4.73 \\
+
+HumanEval {\scriptsize (P@64)} & 54.88 / 8 & 60.37 / 5.51 & 67.68 / 4.86 \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+We next evaluate whether a routing policy selected on a calibration task transfers to other downstream tasks.
+
+We take the Lossless and Optimum policies identified on GSM8K-COT for Qwen3-30B-A3B with Qwen3-0.6B, and evaluate their accuracy across multiple benchmarks. 
+Each result is averaged over five runs with different seeds to reduce evaluation variance.
+
+As shown in Table~\ref{tab:transfer_accuracy}, the Lossless policy consistently preserves accuracy across all tasks, indicating that conservative allocation strategies generalize well. 
+The Optimum policy achieves additional efficiency gains, while maintaining strong performance on reasoning (BBH-COT) and code generation (HumanEval) tasks.
+
+However, on instruction-following tasks (IFEval), the Optimum policy exhibits a more noticeable degradation. 
+This suggests that policies calibrated on reasoning tasks may be slightly over-aggressive when applied to tasks requiring strict structural adherence.
+
+We attribute this behavior to differences in decoding phases. 
+Reasoning tasks involve a "thinking" phase with higher uncertainty and redundancy, whereas instruction-following corresponds to a more constrained "answering" phase with lower tolerance for errors. 
+These differences imply that phase-aware allocation policies may further improve performance in practice.
+
+Overall, these results show that routing policies learned from a single task transfer well across related workloads, while leaving room for further gains through phase-specific adaptation.
+
+% \subsection{Case Study: Self-Regulation in Long Generation} \label{sec:evaluation:self-regulation}
+
+% % figure: Top-k vs token position
+
+% We examine how Spec-K adapts routing decisions during long-form generation. As generation progresses, routing budgets vary dynamically with token-level uncertainty: confident tokens are assigned smaller Top-$k$, while uncertain tokens trigger more conservative routing.
+
+% This self-regulation behavior reflects the underlying adaptivity of the resource--quality co-allocation mechanism, where computation is concentrated on difficult tokens and reduced for easier ones.
+
+% \subsection{Case Study: Expert Union Set Shrink and Speedup}
+
+% % figure: union size + latency (single GPU)
+
+% We analyze the effect of Spec-K on expert utilization under a single-GPU setting with small batch sizes. Compared to Vanilla and SpecDecode, Spec-K significantly reduces the size of the expert union set across tokens.
+
+% This reduction directly translates into lower GroupGEMM latency, demonstrating that routing sparsity improves kernel efficiency even in the absence of large-scale parallelism.
+
+
+\section{Related Work}
+
+\subsection{MoE Serving Systems}
+
+Mixture-of-Experts (MoE) enables scalable LLMs via token-wise Top-$k$ routing, as established by GShard~\cite{lepikhin2020gshard} and Switch Transformer~\cite{fedus2022switch}. 
+In serving, efficiency is dominated by expert parallelism overheads, including all-to-all communication, memory access, and load imbalance. 
+Prior work addresses these bottlenecks through memory optimization~\cite{chen2025ktransformers,zhong2024adapmoe}, load balancing~\cite{deepseekai2025eplb,deepseek2025lplb}, communication--computation overlap~\cite{he2022fastermoe,liu2024deepseek}, and kernel design~\cite{gale2023megablocks}, with system frameworks integrating these techniques for large-scale deployment~\cite{rajbhandari2022deepspeed,li2023accelerating,hwang2023tutel,yuan2025x,kwon2023efficient,zheng2024sglang}.
+
+These methods optimize execution under a fixed routing policy, typically assuming a uniform Top-$k$ budget across tokens. 
+In contrast, we focus on token-level resource allocation and are orthogonal to system-level optimizations.
+
+\subsection{Speculative Decoding}
+
+Speculative decoding (SD) accelerates autoregressive generation by using a draft model to propose tokens that are verified in parallel by a target model. 
+Prior work improves proposal quality and acceptance rates~\cite{stern2018blockwise,chen2023spec,leviathan2023spec,cai2024medusa,li2024eagle,miao2024specinfer,he2024rest,spector2023accelerating}, as well as batching and system efficiency.
+
+Existing SD methods assume a fixed target-side computation pattern during verification. 
+We instead use the draft model as a \emph{preview signal} to guide adaptive resource allocation before target execution, making our approach complementary to SD.
+
+\subsection{Adaptive Computation and Dynamic Inference}
+
+Adaptive inference dynamically adjusts computation based on input difficulty. 
+Prior work spans both training-based and training-free approaches.
+
+Training-based methods incorporate adaptivity into the model, including early exiting (e.g., BranchyNet~\cite{teerapittayanon2016branchynet}, DeeBERT~\cite{xin2020deebert}), token pruning~\cite{rao2021dynamicvit}, sparse attention~\cite{yuan2025native}, and learned MoE routing behaviors~\cite{zhou2022mixture,huang2024harder,jin2024moe++}. 
+These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes.
+
+Training-free methods adapt computation at inference time. 
+Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while MoE-specific methods such as Lynx~\cite{gupta2024lynx} prune experts based on routing confidence. 
+These approaches typically rely on signals observed during execution and operate at token-, block-, or batch-level.
+
+In contrast, our method performs \emph{pre-execution} adaptation using preview signals, enabling token-level resource allocation before the target forward pass, suggesting a new paradigm for guiding adaptive inference.
+
+\section{Discussion and Conclusion}
+
+Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or incurring overhead.
+
+Our results point to a consistent phenomenon: reducing the routing budget can improve both efficiency and speculative acceptance. This suggests that MoE inference operates in a regime of \emph{excess capacity but imperfect utilization}, where activating more experts does not necessarily improve draft--target alignment. Instead, adaptive sparsification acts as an implicit regularizer, suppressing low-contribution experts and yielding more consistent predictions. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial redundancy for typical tokens, while a small subset of difficult tokens defines the capacity boundary. Spec-K exploits this asymmetry by reallocating resources toward high-uncertainty regions.
+
+This approach has several limitations. Its effectiveness depends on preview signal quality; mismatch between draft uncertainty and true difficulty can lead to suboptimal allocation. Different generation regimes also exhibit varying sensitivity: policies calibrated on reasoning tasks may be over-aggressive for instruction-following workloads. Finally, Spec-K operates at token-level granularity with a uniform policy across layers, leaving finer-grained control unexplored.
+
+These limitations suggest several directions. Richer preview signals (e.g., longer speculative windows) may better capture token difficulty. Extending allocation beyond token-level Top-$k$ to per-layer routing, attention sparsity, or other compute budgets would generalize RASP into a unified resource allocator. Further gains may also arise from co-design with scheduling, batching, and expert placement in distributed systems.
+
+More broadly, RASP suggests a shift in how inference efficiency is approached. Instead of treating computation as a fixed per-token budget to be optimized post hoc, it becomes a quantity that can be \emph{predicted and allocated on demand}. In this view, Spec-K represents one point in a larger design space of online, signal-driven inference methods, where efficiency emerges not from uniformly reducing computation, but from aligning it with the structure of the generation process itself.
+
+
+\newpage
+
+% \section{Ease of Use}
+
+% \subsection{Maintaining the Integrity of the Specifications}
+
+% The IEEEtran class file is used to format your paper and style the text. All margins, 
+% column widths, line spaces, and text fonts are prescribed; please do not 
+% alter them. You may note peculiarities. For example, the head margin
+% measures proportionately more than is customary. This measurement 
+% and others are deliberate, using specifications that anticipate your paper 
+% as one part of the entire proceedings, and not as an independent document. 
+% Please do not revise any of the current designations.
+
+% \section{Prepare Your Paper Before Styling}
+% Before you begin to format your paper, first write and save the content as a 
+% separate text file. Complete all content and organizational editing before 
+% formatting. Please note sections \ref{AA}--\ref{SCM} below for more information on 
+% proofreading, spelling and grammar.
+
+% Keep your text and graphic files separate until after the text has been 
+% formatted and styled. Do not number text heads---{\LaTeX} will do that 
+% for you.
+
+% \subsection{Abbreviations and Acronyms}\label{AA}
+% Define abbreviations and acronyms the first time they are used in the text, 
+% even after they have been defined in the abstract. Abbreviations such as 
+% IEEE, SI, MKS, CGS, ac, dc, and rms do not have to be defined. Do not use 
+% abbreviations in the title or heads unless they are unavoidable.
+
+% \subsection{Units}
+% \begin{itemize}
+% \item Use either SI (MKS) or CGS as primary units. (SI units are encouraged.) English units may be used as secondary units (in parentheses). An exception would be the use of English units as identifiers in trade, such as ``3.5-inch disk drive''.
+% \item Avoid combining SI and CGS units, such as current in amperes and magnetic field in oersteds. This often leads to confusion because equations do not balance dimensionally. If you must use mixed units, clearly state the units for each quantity that you use in an equation.
+% \item Do not mix complete spellings and abbreviations of units: ``Wb/m\textsuperscript{2}'' or ``webers per square meter'', not ``webers/m\textsuperscript{2}''. Spell out units when they appear in text: ``. . . a few henries'', not ``. . . a few H''.
+% \item Use a zero before decimal points: ``0.25'', not ``.25''. Use ``cm\textsuperscript{3}'', not ``cc''.)
+% \end{itemize}
+
+% \subsection{Equations}
+% Number equations consecutively. To make your 
+% equations more compact, you may use the solidus (~/~), the exp function, or 
+% appropriate exponents. Italicize Roman symbols for quantities and variables, 
+% but not Greek symbols. Use a long dash rather than a hyphen for a minus 
+% sign. Punctuate equations with commas or periods when they are part of a 
+% sentence, as in:
+% \begin{equation}
+% a+b=\gamma\label{eq}
+% \end{equation}
+
+% Be sure that the 
+% symbols in your equation have been defined before or immediately following 
+% the equation. Use ``\eqref{eq}'', not ``Eq.~\eqref{eq}'' or ``equation \eqref{eq}'', except at 
+% the beginning of a sentence: ``Equation \eqref{eq} is . . .''
+
+% \subsection{\LaTeX-Specific Advice}
+
+% Please use ``soft'' (e.g., \verb|\eqref{Eq}|) cross references instead
+% of ``hard'' references (e.g., \verb|(1)|). That will make it possible
+% to combine sections, add equations, or change the order of figures or
+% citations without having to go through the file line by line.
+
+% Please don't use the \verb|{eqnarray}| equation environment. Use
+% \verb|{align}| or \verb|{IEEEeqnarray}| instead. The \verb|{eqnarray}|
+% environment leaves unsightly spaces around relation symbols.
+
+% Please note that the \verb|{subequations}| environment in {\LaTeX}
+% will increment the main equation counter even when there are no
+% equation numbers displayed. If you forget that, you might write an
+% article in which the equation numbers skip from (17) to (20), causing
+% the copy editors to wonder if you've discovered a new method of
+% counting.
+
+% {\BibTeX} does not work by magic. It doesn't get the bibliographic
+% data from thin air but from .bib files. If you use {\BibTeX} to produce a
+% bibliography you must send the .bib files. 
+
+% {\LaTeX} can't read your mind. If you assign the same label to a
+% subsubsection and a table, you might find that Table I has been cross
+% referenced as Table IV-B3. 
+
+% {\LaTeX} does not have precognitive abilities. If you put a
+% \verb|\label| command before the command that updates the counter it's
+% supposed to be using, the label will pick up the last counter to be
+% cross referenced instead. In particular, a \verb|\label| command
+% should not go before the caption of a figure or a table.
+
+% Do not use \verb|\nonumber| inside the \verb|{array}| environment. It
+% will not stop equation numbers inside \verb|{array}| (there won't be
+% any anyway) and it might stop a wanted equation number in the
+% surrounding equation.
+
+% \subsection{Some Common Mistakes}\label{SCM}
+% \begin{itemize}
+% \item The word ``data'' is plural, not singular.
+% \item The subscript for the permeability of vacuum $\mu_{0}$, and other common scientific constants, is zero with subscript formatting, not a lowercase letter ``o''.
+% \item In American English, commas, semicolons, periods, question and exclamation marks are located within quotation marks only when a complete thought or name is cited, such as a title or full quotation. When quotation marks are used, instead of a bold or italic typeface, to highlight a word or phrase, punctuation should appear outside of the quotation marks. A parenthetical phrase or statement at the end of a sentence is punctuated outside of the closing parenthesis (like this). (A parenthetical sentence is punctuated within the parentheses.)
+% \item A graph within a graph is an ``inset'', not an ``insert''. The word alternatively is preferred to the word ``alternately'' (unless you really mean something that alternates).
+% \item Do not use the word ``essentially'' to mean ``approximately'' or ``effectively''.
+% \item In your paper title, if the words ``that uses'' can accurately replace the word ``using'', capitalize the ``u''; if not, keep using lower-cased.
+% \item Be aware of the different meanings of the homophones ``affect'' and ``effect'', ``complement'' and ``compliment'', ``discreet'' and ``discrete'', ``principal'' and ``principle''.
+% \item Do not confuse ``imply'' and ``infer''.
+% \item The prefix ``non'' is not a word; it should be joined to the word it modifies, usually without a hyphen.
+% \item There is no period after the ``et'' in the Latin abbreviation ``et al.''.
+% \item The abbreviation ``i.e.'' means ``that is'', and the abbreviation ``e.g.'' means ``for example''.
+% \end{itemize}
+% An excellent style manual for science writers is \cite{b7}.
+
+% \subsection{Authors and Affiliations}
+% \textbf{The class file is designed for, but not limited to, six authors.} A 
+% minimum of one author is required for all conference articles. Author names 
+% should be listed starting from left to right and then moving down to the 
+% next line. This is the author sequence that will be used in future citations 
+% and by indexing services. Names should not be listed in columns nor group by 
+% affiliation. Please keep your affiliations as succinct as possible (for 
+% example, do not differentiate among departments of the same organization).
+
+% \subsection{Identify the Headings}
+% Headings, or heads, are organizational devices that guide the reader through 
+% your paper. There are two types: component heads and text heads.
+
+% Component heads identify the different components of your paper and are not 
+% topically subordinate to each other. Examples include Acknowledgments and 
+% References and, for these, the correct style to use is ``Heading 5''. Use 
+% ``figure caption'' for your Figure captions, and ``table head'' for your 
+% table title. Run-in heads, such as ``Abstract'', will require you to apply a 
+% style (in this case, italic) in addition to the style provided by the drop 
+% down menu to differentiate the head from the text.
+
+% Text heads organize the topics on a relational, hierarchical basis. For 
+% example, the paper title is the primary text head because all subsequent 
+% material relates and elaborates on this one topic. If there are two or more 
+% sub-topics, the next level head (uppercase Roman numerals) should be used 
+% and, conversely, if there are not at least two sub-topics, then no subheads 
+% should be introduced.
+
+% \subsection{Figures and Tables}
+% \paragraph{Positioning Figures and Tables} Place figures and tables at the top and 
+% bottom of columns. Avoid placing them in the middle of columns. Large 
+% figures and tables may span across both columns. Figure captions should be 
+% below the figures; table heads should appear above the tables. Insert 
+% figures and tables after they are cited in the text. Use the abbreviation 
+% ``Fig.~\ref{fig}'', even at the beginning of a sentence.
+
+% \begin{table}[htbp]
+% \caption{Table Type Styles}
+% \begin{center}
+% \begin{tabular}{|c|c|c|c|}
+% \hline
+% \textbf{Table}&\multicolumn{3}{|c|}{\textbf{Table Column Head}} \\
+% \cline{2-4} 
+% \textbf{Head} & \textbf{\textit{Table column subhead}}& \textbf{\textit{Subhead}}& \textbf{\textit{Subhead}} \\
+% \hline
+% copy& More table copy$^{\mathrm{a}}$& &  \\
+% \hline
+% \multicolumn{4}{l}{$^{\mathrm{a}}$Sample of a Table footnote.}
+% \end{tabular}
+% \label{tab1}
+% \end{center}
+% \end{table}
+
+% \begin{figure}[htbp]
+% \centerline{\includegraphics{fig1.png}}
+% \caption{Example of a figure caption.}
+% \label{fig}
+% \end{figure}
+
+% Figure Labels: Use 8 point Times New Roman for Figure labels. Use words 
+% rather than symbols or abbreviations when writing Figure axis labels to 
+% avoid confusing the reader. As an example, write the quantity 
+% ``Magnetization'', or ``Magnetization, M'', not just ``M''. If including 
+% units in the label, present them within parentheses. Do not label axes only 
+% with units. In the example, write ``Magnetization (A/m)'' or ``Magnetization 
+% \{A[m(1)]\}'', not just ``A/m''. Do not label axes with a ratio of 
+% quantities and units. For example, write ``Temperature (K)'', not 
+% ``Temperature/K''.
+
+% \section*{Acknowledgment}
+
+% The preferred spelling of the word ``acknowledgment'' in America is without 
+% an ``e'' after the ``g''. Avoid the stilted expression ``one of us (R. B. 
+% G.) thanks $\ldots$''. Instead, try ``R. B. G. thanks$\ldots$''. Put sponsor 
+% acknowledgments in the unnumbered footnote on the first page.
+
+% \section*{References}
+
+% Please number citations consecutively within brackets \cite{b1}. The 
+% sentence punctuation follows the bracket \cite{b2}. Refer simply to the reference 
+% number, as in \cite{b3}---do not use ``Ref. \cite{b3}'' or ``reference \cite{b3}'' except at 
+% the beginning of a sentence: ``Reference \cite{b3} was the first $\ldots$''
+
+% Number footnotes separately in superscripts. Place the actual footnote at 
+% the bottom of the column in which it was cited. Do not put footnotes in the 
+% abstract or reference list. Use letters for table footnotes.
+
+% Unless there are six authors or more give all authors' names; do not use 
+% ``et al.''. Papers that have not been published, even if they have been 
+% submitted for publication, should be cited as ``unpublished'' \cite{b4}. Papers 
+% that have been accepted for publication should be cited as ``in press'' \cite{b5}. 
+% Capitalize only the first word in a paper title, except for proper nouns and 
+% element symbols.
+
+% For papers published in translation journals, please give the English 
+% citation first, followed by the original foreign-language citation \cite{b6}.
+
+% \begin{thebibliography}{00}
+% \bibitem{b1} G. Eason, B. Noble, and I. N. Sneddon, ``On certain integrals of Lipschitz-Hankel type involving products of Bessel functions,'' Phil. Trans. Roy. Soc. London, vol. A247, pp. 529--551, April 1955.
+% \bibitem{b2} J. Clerk Maxwell, A Treatise on Electricity and Magnetism, 3rd ed., vol. 2. Oxford: Clarendon, 1892, pp.68--73.
+% \bibitem{b3} I. S. Jacobs and C. P. Bean, ``Fine particles, thin films and exchange anisotropy,'' in Magnetism, vol. III, G. T. Rado and H. Suhl, Eds. New York: Academic, 1963, pp. 271--350.
+% \bibitem{b4} K. Elissa, ``Title of paper if known,'' unpublished.
+% \bibitem{b5} R. Nicole, ``Title of paper with only first word capitalized,'' J. Name Stand. Abbrev., in press.
+% \bibitem{b6} Y. Yorozu, M. Hirano, K. Oka, and Y. Tagawa, ``Electron spectroscopy studies on magneto-optical media and plastic substrate interface,'' IEEE Transl. J. Magn. Japan, vol. 2, pp. 740--741, August 1987 [Digests 9th Annual Conf. Magnetics Japan, p. 301, 1982].
+% \bibitem{b7} M. Young, The Technical Writer's Handbook. Mill Valley, CA: University Science, 1989.
+% \end{thebibliography}
+% \vspace{12pt}
+% \color{red}
+% IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
