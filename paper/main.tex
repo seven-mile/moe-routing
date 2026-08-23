@@ -146,9 +146,9 @@ In distributed inference, MoE layers are typically executed under an expert-para
 \end{itemize}
 
 Both dispatch and combine incur all-to-all communication across devices, while expert computation scales with the total number of token-expert assignments. 
-For a batch of tokens, the system workload depends on the set of activated experts across all tokens. Let $\mathcal{S}_{L,i}$ denote the selected experts for token $i$, and define the union:
+For a token batch $\mathcal{T}$, the system workload depends on the set of activated experts across all tokens. Let $\mathcal{S}_{L}(x)$ denote the selected experts for token $x\in\mathcal{T}$, and define the union:
 \begin{equation*}
-\mathcal{U}_L = \bigcup_i \mathcal{S}_{L,i}.
+\mathcal{U}_L = \bigcup_{x\in\mathcal{T}} \mathcal{S}_{L}(x).
 \end{equation*}
 The size of $\mathcal{U}_L$ determines how many experts must be materialized during execution, directly impacting memory footprint, communication volume, and the efficiency of grouped execution.
 
@@ -162,9 +162,9 @@ At each decoding step, the draft model generates a sequence of $\gamma$ candidat
 
 This procedure enables multiple tokens to be processed per target forward pass, improving efficiency when the acceptance rate is high. The benefit primarily comes from amortizing model execution and memory access across candidate tokens.
 
-During verification, the target model processes $1+\gamma$ tokens in parallel (including one carried-over token from the previous step). In MoE models, each of these tokens may activate a different subset of experts. As a result, the effective expert set becomes
+During verification, the target model processes $1+\gamma$ tokens in parallel (including one carried-over token from the previous step). In MoE models, each of these tokens may activate a different subset of experts. For a request $b$ in batch $\mathcal{B}$, let $q=0,\dots,\gamma$ index positions in its verification block and let $\mathcal{S}_{L,b,q}$ denote the corresponding selected experts. The effective expert set becomes
 \begin{equation*}
-\mathcal{U}_L^{\text{SD}} = \bigcup_i \bigcup_{j=1}^{1+\gamma} \mathcal{S}_{L,(i,j)},
+\mathcal{U}_L^{\text{SD}} = \bigcup_{b\in\mathcal{B}} \bigcup_{q=0}^{\gamma} \mathcal{S}_{L,b,q},
 \end{equation*}
 which can be significantly larger than that of a single token. This increases both communication overhead in dispatch/combine and reduces the efficiency of grouped expert execution.
 
@@ -172,17 +172,17 @@ which can be significantly larger than that of a single token. This increases bo
 \label{sec:bg:uncertainty}
 
 The predictive distribution of a language model provides an intrinsic measure of uncertainty regarding the next token.
-Given the model's output probability distribution $\mathbf{z}_i$ over the vocabulary $\mathcal{V}$ at step $i$, the Shannon entropy is defined as:
+Given the model's output probability distribution $\mathbf{p}_i$ over the vocabulary $\mathcal{V}$ at step $i$, the Shannon entropy is defined as:
 \begin{equation*}
-H(\mathbf{z}_i) = -\sum_{w \in \mathcal{V}} P(w | \mathbf{z}_i) \log P(w | \mathbf{z}_i).
+H(\mathbf{p}_i) = -\sum_{w \in \mathcal{V}} p_i(w) \log p_i(w).
 \end{equation*}
 
 The corresponding token-level perplexity is derived as the exponential of the entropy:
 \begin{equation*}
-\text{PP}(\mathbf{z}_i) = \exp(H(\mathbf{z}_i)).
+\text{PP}(\mathbf{p}_i) = \exp(H(\mathbf{p}_i)).
 \end{equation*}
 
-While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $K$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $K$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
+While entropy quantifies the average information content, perplexity provides a more intuitive physical interpretation: it represents the \textit{effective size} of the model's choice set. Specifically, a perplexity value of $M$ indicates that the model's current uncertainty is equivalent to a uniform distribution over $M$ discrete tokens. In the context of speculative decoding, these metrics characterize the ``sharpness'' of the draft model's distribution prior to verification, where lower perplexity implies significant information redundancy, suggesting that the distribution is more robust to lossy approximations or high-ratio compression during distributed inference.
 
 \subsection{Long Reasoning and Token Heterogeneity}
 
@@ -245,10 +245,10 @@ First, the \textbf{preview signal} $\Psi$ is instantiated as token-level uncerta
 Second, the \textbf{resource} being controlled is the routing budget in MoE layers---the Top-$k$ number of activated experts per token.
 Third, the \textbf{allocation policy} $\mathcal{F}$ produces a token-wise plan $\mathbf{A} = (\hat k_1,\dots,\hat k_{1+\gamma})$, where each $\hat k_i \in \{0,\dots,k\}$ specifies the budget for token $i$. We next elaborate on these choices.
 
-For each candidate token $S_i$, let $\mathbf{z}_i$ denote its predictive distribution from the draft model.
+For each candidate token $S_i$, let $\mathbf{p}_i$ denote its predictive distribution from the draft model.
 We compute the preview signal as its perplexity:
 \begin{equation}
-\psi_i = \exp(H(\mathbf{z}_i)), \quad i = 1,\dots,\gamma.
+\psi_i = \exp(H(\mathbf{p}_i)), \quad i = 1,\dots,\gamma.
 \end{equation}
 This choice of signal extracts a highly interpretable, compressed representation of token difficulty from the rich, high-dimensional information available in the draft model's forward pass (e.g., hidden states or attention patterns).
 We analyze the advantages of this uncertainty-based signal in Sec.~\ref{sec:mechanism}, showing that it provides a principled basis for allocation by identifying tokens where approximation is naturally more tolerable.
@@ -363,9 +363,9 @@ Spec-K is most aggressive when the current decoding step is predicted to be easy
 This choice can be understood through a basic robustness property of autoregressive decoding.
 
 Consider decoding step $t$ under greedy generation.
-Let $\mathbf{z}_t \in \mathbb{R}^{V}$ denote the full-model logits over the vocabulary, and let
+Let $\mathbf{z}_t \in \mathbb{R}^{|\mathcal{V}|}$ denote the full-model logits over the vocabulary $\mathcal{V}$, and let
 $
-y_t^\star = \arg\max_i \mathbf{z}_t(i)
+y_t^\star = \arg\max_{v\in\mathcal{V}} \mathbf{z}_t(v)
 $
 denote the selected token.
 Suppose reduced routing induces an effective perturbation to the logits, yielding approximate logits
@@ -374,7 +374,7 @@ $
 $
 Define the top-1 margin of the full model as
 \begin{equation}
-m_t = \mathbf{z}_t(y_t^\star) - \max_{j \neq y_t^\star} \mathbf{z}_t(j).
+m_t = \mathbf{z}_t(y_t^\star) - \max_{v\in\mathcal{V},\,v\neq y_t^\star} \mathbf{z}_t(v).
 \end{equation}
 If the perturbation satisfies
 $
@@ -382,7 +382,7 @@ $
 $
 then the greedy decision is preserved, i.e.,
 $
-\arg\max_i \hat{\mathbf{z}}_t(i) = y_t^\star.
+\arg\max_{v\in\mathcal{V}} \hat{\mathbf{z}}_t(v) = y_t^\star.
 $
 
 In practice, low-perplexity tokens tend to have more peaked next-token distributions, so the same routing reduction is less likely to change the selected token.
@@ -486,7 +486,7 @@ We therefore select representative settings that isolate key factors and reflect
 
 Experiments are conducted on a multi-node GPU cluster with 8 NVIDIA H20 GPUs per node (96\,GB memory), connected via NVLink within each node and an NDR InfiniBand fabric across nodes. Each node is equipped with a 400\,Gb/s NVIDIA ConnectX-7 NIC.
 
-We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$k$, where attention layers use DP-$k$ and MoE experts are partitioned across $k$ devices.
+We adopt a distributed inference setup with data parallelism (DP) for dense layers and expert parallelism (EP) for MoE layers, without tensor parallelism. We denote configurations as EP-$d$, where attention layers use DP-$d$ and MoE experts are partitioned across $d$ devices.
 
 Our implementation is based on vLLM~v0.16.0 with Triton-based GroupGEMM kernels and DeepEP~\cite{deepep2025} in low-latency mode (IBGDA). Prefix caching is disabled to ensure consistent performance and accuracy measurement. Speculative decoding uses padded drafter batches to minimize scheduling overhead. All methods, including the baseline, share the same system stack for fair comparison.
 
