@@ -97,7 +97,7 @@ This abstraction decouples preview generation from policy design, enabling flexi
 
 Based on this principle, we introduce \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive inference. 
 RASP decomposes the inference process into three components: (1) a \emph{preview signal} that estimates token difficulty, (2) a \emph{allocation policy} that maps this signal to a resource allocation plan, and (3) the \emph{adaptive target model execution} that realizes the allocation with speedup. 
-Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free adaptation without an additional predictor or model pass.
+Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP uses external preview signals available before target computation. In speculative decoding, these signals are derived from predictive distributions already produced by the draft model.
 This abstraction enables fine-grained, online adjustment of compute budgets, allowing systems to allocate more resources to difficult tokens while reducing waste on easy ones. 
 Beyond MoE routing, the framework naturally extends to other forms of adaptive computation, such as sparse attention or layer skipping.
 
@@ -269,7 +269,7 @@ w_{L,i,r}, & r\le\hat{k}_i\\
 0, & \text{otherwise}
 \end{cases}
 \end{equation}
-This modification ensures that tokens with a reduced budget $\hat k_i$ activate only experts $e_{L,i,1},\ldots,e_{L,i,\hat k_i}$. Our primary vLLM path retains the base-Top-$k$-normalized weights and does not renormalize after masking.
+This modification ensures that tokens with a reduced budget $\hat k_i$ activate only experts $e_{L,i,1},\ldots,e_{L,i,\hat k_i}$. Our primary vLLM path retains the base-Top-$k$-normalized weights after masking.
 
 The benefits of this adaptive allocation are directly reflected in the system cost $\mathcal{C}(\mathbf{A})$.
 In MoE routing, both expert computation (FLOPs) and dispatch/combine communication scale approximately linearly with the number of activated experts.
@@ -341,7 +341,7 @@ To optimize over this constrained space, we use a positive scale $s=a_k$ and rat
 We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
 Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
 
-This optimization is an offline calibration step. At serving time, the selected thresholds are fixed, and runtime execution consists only of the piecewise policy and routing mask; BoTorch, per-batch search, and additional prediction models are not on the inference path.
+The resulting Pareto frontier is computed during offline calibration. Serving uses a selected set of fixed thresholds and evaluates the corresponding piecewise policy for each token.
 
 In practice, we use a low-dimensional parameterization (typically 5--6 parameters for $k=8$ by disabling the leading over-aggressive positions), which keeps the search efficient; the overall cost is dominated by model inference during evaluation.
 
@@ -435,21 +435,13 @@ Each integration preserves its framework's native semantics. The primary vLLM sy
 
 \subsection{Vectorized Policy Execution}
 
-Continuous batching may combine requests that use different fixed policies. Evaluating these policies request by request would introduce repeated kernel launches and host--device coordination. We instead fuse draft-distribution entropy, per-request threshold lookup, and token-wise Top-$k$ assignment into a single Triton~\cite{tillet2019triton} kernel over all candidate tokens in the batch. The kernel produces routing budgets directly on device; the online path contains neither policy search nor an additional prediction pass.
+Continuous batching may combine requests using different policies. We fuse draft-distribution entropy, per-request threshold lookup, and token-wise Top-$k$ assignment into a single Triton~\cite{tillet2019triton} kernel over all candidate tokens in the batch. Across the serving configurations evaluated below, policy execution accounts for less than $0.1\%$ of total runtime.
 
 \subsection{Adaptive Kernel Support}
 
 Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert. Section~\ref{sec:evaluation:end2end} quantifies both the resulting absolute critical-path reduction and the modest change in relative skew.
 
 The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. When routing budgets vary across tokens under Spec-K, this fixed partitioning leads to warp-level imbalance. We augment the workload partitioning with adaptive rebalancing that accounts for per-token budget variations. Microbenchmarks confirm that this adjustment brings observed communication latency into closer alignment with the theoretical reduction in communication volume.
-
-\section{Evaluation} \label{sec:evaluation}
-
-We evaluate Spec-K along two axes:
-(1) end-to-end system performance, and
-(2) generality across models, drafting methods, and tasks.
-
-We first demonstrate that Spec-K consistently improves throughput under realistic serving configurations. We then attribute these gains to three factors: reduced computation, reduced communication, and improved speculative acceptance. Finally, we show that these benefits generalize across diverse model families and tasks, and that policies selected on a calibration task transfer well to other downstream workloads.
 
 \begin{figure*}[t]
     \centering
@@ -480,6 +472,14 @@ We first demonstrate that Spec-K consistently improves throughput under realisti
     }
     \label{fig:throughput_end2end}
 \end{figure*}
+
+\section{Evaluation} \label{sec:evaluation}
+
+We evaluate Spec-K along two axes:
+(1) end-to-end system performance, and
+(2) generality across models, drafting methods, and tasks.
+
+We first demonstrate that Spec-K consistently improves throughput under realistic serving configurations. We then attribute these gains to three factors: reduced computation, reduced communication, and improved speculative acceptance. Finally, we show that these benefits generalize across diverse model families and tasks, and that policies selected on a calibration task transfer well to other downstream workloads.
 
 \subsection{Experimental Setup}
 
@@ -614,20 +614,6 @@ Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-\subsection{Portability on Ascend NPUs}
-\label{sec:evaluation:ascend}
-
-To examine whether Spec-K's benefits depend on the GPU software stack used above, we additionally evaluate its vLLM-Ascend implementation~\cite{huawei2024vllmascend} on an Ascend NPU platform. We use Qwen3-30B-A3B as the target model, Qwen3-0.6B as the standalone draft model, ShareGPT requests, and seven draft candidates per verification step. At each offered load, Spec-K and SpecDecode use the same model, workload, software stack, and deployment configuration. We report only normalized throughput and omit detailed hardware configuration; these measurements provide portability evidence rather than an absolute comparison with Figure~\ref{fig:throughput_end2end}.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
-\caption{End-to-end throughput on an Ascend NPU platform, normalized to SpecDecode at 128 concurrent requests. Labels above the Spec-K Optimum bars report speedup over SpecDecode at the same concurrency. Absolute throughput and detailed hardware configuration are omitted. The 512-request setting experiences KV-cache capacity pressure.}
-\label{fig:ascend_throughput}
-\end{figure}
-
-As shown in Figure~\ref{fig:ascend_throughput}, the Spec-K Optimum policy improves end-to-end throughput by $1.14\times$, $1.29\times$, and $1.32\times$ at 128, 256, and 384 concurrent requests, respectively. At 512 concurrent requests, where KV-cache capacity pressure constrains the deployment, it still achieves a $1.10\times$ improvement. These results show that the same preview-guided dynamic Top-$k$ mechanism transfers to a distinct accelerator and serving ecosystem without retraining or modifying model weights.
 
 \subsection{Where Does the Gain Come From?}
 
@@ -813,6 +799,20 @@ These differences imply that phase-aware allocation policies may further improve
 
 Overall, these results show that routing policies learned from a single task transfer well across related workloads, while leaving room for further gains through phase-specific adaptation.
 
+\subsection{Portability on Ascend NPUs}
+\label{sec:evaluation:ascend}
+
+We further evaluate Spec-K with vLLM-Ascend~\cite{huawei2024vllmascend} to study portability across accelerator and serving stacks. The experiment uses Qwen3-30B-A3B, a standalone Qwen3-0.6B draft model, ShareGPT requests, and seven draft candidates per verification step. Spec-K and SpecDecode share the same configuration at each offered load. Throughput is normalized to SpecDecode at 128 concurrent requests; the deployment configuration remains confidential.
+
+\begin{figure}[!b]
+\centering
+\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
+\caption{Normalized end-to-end throughput on an Ascend NPU platform. Values are normalized to SpecDecode at 128 concurrent requests; annotations report Spec-K Optimum speedup over SpecDecode at the corresponding load. The 512-request setting experiences KV-cache capacity pressure.}
+\label{fig:ascend_throughput}
+\end{figure}
+
+Figure~\ref{fig:ascend_throughput} shows end-to-end speedups of $1.14\times$, $1.29\times$, $1.32\times$, and $1.10\times$ across the four tested loads. The same preview-guided dynamic Top-$k$ mechanism therefore remains effective on a distinct accelerator and serving ecosystem.
+
 % \subsection{Case Study: Self-Regulation in Long Generation} \label{sec:evaluation:self-regulation}
 
 % % figure: Top-k vs token position
@@ -865,7 +865,7 @@ In contrast, Spec-K uses a draft signal available before target execution to var
 
 \section{Discussion and Conclusion}
 
-Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or adding a separate predictor or model pass.
+Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation} and reuses predictive distributions already produced during speculative decoding to guide the target forward pass.
 
 Our results reveal a consistent phenomenon: reducing the routing budget can improve both efficiency and speculative acceptance. This exposes a previously overlooked coupling between target-side expert allocation and speculative verification: activating more experts does not necessarily improve draft--target alignment, while preview-guided sparsification can reduce verification cost and increase acceptance. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial redundancy for typical tokens, while a small subset of difficult tokens defines the capacity boundary. Spec-K exploits this asymmetry by reallocating resources toward high-uncertainty regions.
 

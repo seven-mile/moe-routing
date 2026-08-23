@@ -28,8 +28,9 @@ SPEC_K_OPTIMUM = [1.1423, 2.1643, 3.0308, 1.9573]
 
 def main() -> None:
     x = np.arange(len(CONCURRENCY))
-    width = 0.34
-    fig, ax = plt.subplots(figsize=(3.45, 2.05))
+    width = 0.30
+    fig, ax = plt.subplots(figsize=(3.45, 2.15))
+    fig.subplots_adjust(left=0.15, right=0.98, bottom=0.23, top=0.78)
 
     ax.bar(
         x - width / 2,
@@ -52,13 +53,14 @@ def main() -> None:
     for xpos, baseline, optimum in zip(x, SPECDECODE, SPEC_K_OPTIMUM):
         ax.text(
             xpos + width / 2,
-            optimum - 0.10,
+            optimum + 0.08,
             f"{optimum / baseline:.2f}x",
             ha="center",
-            va="top",
-            fontsize=7.5,
-            color="white",
+            va="bottom",
+            fontsize=7.2,
+            color="#6F459E",
             fontweight="medium",
+            clip_on=True,
         )
 
     ax.set_xlabel("Concurrent requests")
@@ -73,12 +75,23 @@ def main() -> None:
     ax.spines["left"].set_color("#B7C0CC")
     ax.spines["bottom"].set_color("#B7C0CC")
     ax.tick_params(colors="#556070", length=3, width=0.8)
-    ax.legend(loc="upper left", frameon=False, ncol=2, columnspacing=1.0, handlelength=1.2)
+    legend = ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.04),
+        frameon=True,
+        fancybox=True,
+        facecolor="none",
+        edgecolor="#D7DDE6",
+        ncol=2,
+        borderpad=0.35,
+        columnspacing=1.0,
+        handlelength=1.2,
+    )
+    legend.get_frame().set_linewidth(0.6)
 
     output = Path(__file__).resolve().parents[3] / "paper" / "ascend" / "normalized_throughput.pdf"
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout(pad=0.35)
-    fig.savefig(output, bbox_inches="tight")
+    fig.savefig(output)
     plt.close(fig)
 
 
