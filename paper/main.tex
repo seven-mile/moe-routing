@@ -297,10 +297,10 @@ We parameterize the per-token function $f(\cdot)$ as a \textit{piecewise constan
 f(\psi_i) :=
 \begin{cases}
 k, & \psi_i \ge a_k, \\
-k-1, & \psi_i \ge a_{k-1}, \\
+k-1, & a_{k-1} \le \psi_i < a_k, \\
 \quad \vdots \\
-1, & \psi_i \ge a_1, \\
-0, & \text{otherwise},
+1, & a_1 \le \psi_i < a_2, \\
+0, & \psi_i < a_1,
 \end{cases}
 \end{equation}
 where the thresholds are monotonic and satisfy:
@@ -329,8 +329,7 @@ This defines a search function that maps policy to (quality, speed), and induces
 Its solution is characterized by a Pareto frontier, which exposes a diverse set of operating points, allowing users to select a policy that matches their desired trade-off.
 
 The search is performed over the threshold parameters $\{a_i\}$ in $f(\cdot)$, which carry the monotonicity constraint in Eq.~(\ref{eq:monotonicity}).
-To optimize over this constrained space, we reparameterize $\{a_i\}$ using
-$b_i = a_i / a_{i+1} \in [0, 1]$, yielding a set of bounded and independent variables; the ordering of $\{a_i\}$ is then ensured by construction.
+To optimize over this constrained space, we represent the thresholds as cumulative products, with the first factor setting the largest threshold and each subsequent factor constrained to $[0,1]$; the ordering of $\{a_i\}$ is then ensured by construction.
 
 We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
 Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
