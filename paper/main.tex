@@ -646,7 +646,7 @@ These results demonstrate that routing sparsity introduced by Spec-K translates 
 \centerline{\includegraphics[width=0.8\linewidth]{total_topk_vs_acc.pdf}}
 \caption{Acceptance rate versus average routing budget (Top-$k$) for Qwen3-30B-A3B with Qwen3-0.6B on ShareGPT.
 Each point corresponds to a policy selected from the Pareto frontier.
-Reducing the routing budget consistently increases acceptance, indicating improved alignment between draft and target models under adaptive allocation.}
+Reducing the routing budget consistently increases acceptance across the evaluated Spec-K policies, revealing a coupled benefit of adaptive target-side routing.}
 \label{fig:topk_vs_acceptance}
 \end{figure}
 
@@ -655,13 +655,12 @@ In addition to reducing per-step latency, Spec-K also improves the efficiency of
 To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B. 
 Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
 
-As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate. 
-This suggests that more aggressive routing implicitly improves alignment between the draft and target models, allowing more draft tokens to be verified per step.
+As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate.
+This suggests that more aggressive routing improves alignment between the draft and target models, allowing more draft tokens to be accepted per step.
 
 This trend is opposite to conventional expectations that reducing model capacity harms alignment, highlighting the unique effect of adaptive allocation.
 
-This effect is complementary to system-level optimizations: while reduced routing lowers the cost of each verification step, higher acceptance increases the number of tokens processed per step. 
-Together, these factors contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
+This effect complements the reduction in per-step latency: reduced routing lowers the cost of each verification step, while higher acceptance increases the number of tokens committed per target-model step. The quality results in Section~\ref{sec:evaluation:pareto} further show that Spec-K can realize both gains with negligible target-model accuracy loss. Together, lower verification cost and higher acceptance contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
 
 \subsection{Quality--Efficiency Tradeoff and Generalization}
 
