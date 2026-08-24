@@ -852,7 +852,8 @@ Adaptive inference dynamically adjusts computation based on input difficulty.
 Prior work spans both training-based and training-free approaches.
 
 Training-based methods incorporate adaptivity into the model, including early exiting (e.g., BranchyNet~\cite{teerapittayanon2016branchynet}, DeeBERT~\cite{xin2020deebert}), token pruning~\cite{rao2021dynamicvit}, sparse attention~\cite{yuan2025native}, and learned MoE routing behaviors~\cite{zhou2022mixture,huang2024harder,jin2024moe++}. 
-These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes.
+In particular, Harder Task Needs More Experts~\cite{huang2024harder} trains a confidence-based router with a dynamic sparsity objective.
+These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes; Spec-K instead adapts a pretrained MoE model using a pre-execution draft signal.
 
 Training-free methods adapt computation at inference time. 
 Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while Lynx~\cite{gupta2024lynx} uses target-side router scores to remap low-affinity token--expert assignments onto a smaller batch-level active-expert set while preserving the model's per-token Top-$k$.
