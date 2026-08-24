@@ -728,6 +728,10 @@ Spec-K identifies operating points along this frontier, including a lossless reg
 
 To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k_{\mathrm{fixed}}$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
 
+\subsubsection{Cross-System Comparison with Lynx}
+
+Lynx~\cite{gupta2024lynx} reports a $1.14\times$ speedup in median time per output token on Qwen3-30B-A3B-Instruct with GSM8K, with exact-match accuracy decreasing from 88.4\% to 87.6\%. Lynx remaps target-side routing decisions to reduce the active-expert set of a batch; Spec-K instead uses pre-execution draft signals to allocate token-wise routing budgets. The two methods therefore optimize complementary dimensions of MoE serving.
+
 \subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
 We analyze the quality--efficiency tradeoff of Spec-K across diverse model architectures, drafting methods, and tasks.
@@ -851,10 +855,10 @@ Training-based methods incorporate adaptivity into the model, including early ex
 These approaches rely on intrinsic signals such as intermediate activations and require retraining or architectural changes.
 
 Training-free methods adapt computation at inference time. 
-Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while MoE-specific methods such as Lynx~\cite{gupta2024lynx} prune experts based on routing confidence. 
+Token pruning and KV-cache reduction (e.g., SnapKV~\cite{li2024snapkv}) reduce attention cost, while Lynx~\cite{gupta2024lynx} uses target-side router scores to remap low-affinity token--expert assignments onto a smaller batch-level active-expert set while preserving the model's per-token Top-$k$.
 These approaches typically rely on signals observed during execution and operate at token-, block-, or batch-level.
 
-In contrast, our method performs \emph{pre-execution} adaptation using preview signals, enabling token-level resource allocation before the target forward pass, suggesting a new paradigm for guiding adaptive inference.
+In contrast, Spec-K uses a draft signal available before target execution to vary each token's routing budget, reducing token--expert assignments themselves rather than only their batch-level union.
 
 \section{Discussion and Conclusion}
 
