@@ -129,13 +129,14 @@ In summary, we make the following contributions:
 \section{Background and Motivation}
 
 \subsection{Mixture-of-Experts and Serving}
+\label{sec:bg:moe-serving}
 
-Mixture-of-Experts (MoE) replaces the dense feed-forward network in transformer layers with a set of $n$ experts, where only a sparse subset is activated for each token. 
-Given a token representation $\mathbf{x}_{L,i}$ at layer $L$, a gating function produces routing scores over expert $j$:
+Mixture-of-Experts (MoE) replaces the dense feed-forward network in transformer layers with a set of $n$ experts, where only a sparse subset is activated for each token.
+For a token representation $\mathbf{x}_{L,i}$ at layer $L$, let
 \begin{equation*}
-\mathcal{G}_{L,i,j} = \operatorname{Gate}(\mathbf{x}_{L,i})_j.
+\mathcal{R}_{L,i} = \operatorname{TopK}(\operatorname{Gate}(\mathbf{x}_{L,i}), k)
 \end{equation*}
-Under token-choice routing~\cite{lepikhin2020gshard}, the Top-$k$ experts are selected, and their outputs are combined to form the layer output.
+denote the standard ordered routing output under token-choice routing~\cite{lepikhin2020gshard}. Its entries pair the selected expert identifiers with their routing weights in descending gate-score order; the corresponding expert outputs are combined to form the layer output.
 
 In distributed inference, MoE layers are typically executed under an expert-parallel paradigm. The forward pass of a single MoE layer can be decomposed into four stages:
 \begin{itemize}
@@ -145,10 +146,10 @@ In distributed inference, MoE layers are typically executed under an expert-para
     \item \textbf{Combine}: the inverse operator of dispatch, gather and aggregate expert outputs back to the original token order.
 \end{itemize}
 
-Both dispatch and combine incur all-to-all communication across devices, while expert computation scales with the total number of token-expert assignments. 
-For a token batch $\mathcal{T}$, the system workload depends on the set of activated experts across all tokens. Let $\mathcal{S}_{L}(x)$ denote the selected experts for token $x\in\mathcal{T}$, and define the union:
+Both dispatch and combine incur all-to-all communication across devices, while expert computation scales with the total number of token-expert assignments.
+For a token batch indexed by $\mathcal{T}$, the system workload also depends on the set of activated experts across all tokens. Writing $\operatorname{Experts}(\mathcal{R})$ for the expert identifiers in an ordered route, define the union:
 \begin{equation*}
-\mathcal{U}_L = \bigcup_{x\in\mathcal{T}} \mathcal{S}_{L}(x).
+\mathcal{U}_L = \bigcup_{i\in\mathcal{T}} \operatorname{Experts}(\mathcal{R}_{L,i}).
 \end{equation*}
 The size of $\mathcal{U}_L$ determines how many experts must be materialized during execution, directly impacting memory footprint, communication volume, and the efficiency of grouped execution.
 
@@ -162,11 +163,11 @@ At each decoding step, the draft model generates a sequence of $\gamma$ candidat
 
 This procedure enables multiple tokens to be processed per target forward pass, improving efficiency when the acceptance rate is high. The benefit primarily comes from amortizing model execution and memory access across candidate tokens.
 
-During verification, the target model processes $1+\gamma$ tokens in parallel (including one carried-over token from the previous step). In MoE models, each of these tokens may activate a different subset of experts. For a request $b$ in batch $\mathcal{B}$, let $q=0,\dots,\gamma$ index positions in its verification block and let $\mathcal{S}_{L,b,q}$ denote the corresponding selected experts. The effective expert set becomes
+During verification, the target model processes $1+\gamma$ tokens in parallel (including one carried-over token from the previous step). In MoE models, each of these tokens may activate a different subset of experts. For a request $b$ in batch $\mathcal{B}$, let $i=1,\dots,1+\gamma$ index positions in its verification block and let $\mathcal{R}_{L,b,i}$ denote the corresponding ordered route. The effective expert set becomes
 \begin{equation*}
-\mathcal{U}_L^{\text{SD}} = \bigcup_{b\in\mathcal{B}} \bigcup_{q=0}^{\gamma} \mathcal{S}_{L,b,q},
+\mathcal{U}_L^{\text{SD}} = \bigcup_{b\in\mathcal{B}} \bigcup_{i=1}^{1+\gamma} \operatorname{Experts}(\mathcal{R}_{L,b,i}),
 \end{equation*}
-which can be significantly larger than that of a single token. This increases both communication overhead in dispatch/combine and reduces the efficiency of grouped expert execution.
+which can be significantly larger than that of a single token. This increases communication overhead in dispatch/combine and reduces the efficiency of grouped expert execution.
 
 \subsection{Entropy, Perplexity, and Uncertainty}
 \label{sec:bg:uncertainty}
@@ -239,7 +240,7 @@ In this work, we instantiate RASP for MoE routing using uncertainty-based previe
 
 \subsection{Spec-K: A Dynamic Top-k Instantiation} \label{sec:method:spec_k}
 
-We instantiate RASP for MoE routing with \textbf{Spec-K}, a dynamic Top-$k$ allocation mechanism driven by speculative preview.
+We instantiate RASP for MoE routing with \textbf{Spec-K}, a dynamic Top-$k$ allocation mechanism driven by speculative preview. We present Spec-K for one request and one verification block; batched serving applies the same policy independently to each request. Accordingly, $i=1,\dots,1+\gamma$ indexes positions within that block.
 This instantiation makes three concrete design choices for the RASP components.
 First, the \textbf{preview signal} $\Psi$ is instantiated as token-level uncertainty derived from the draft model, represented as a vector $\boldsymbol{\Psi} = (\psi_1,\dots,\psi_\gamma)$.
 Second, the \textbf{resource} being controlled is the routing budget in MoE layers---the Top-$k$ number of activated experts per token.
@@ -258,21 +259,16 @@ The allocation policy then maps this signal vector $\boldsymbol{\Psi}$ to a reso
 \mathbf{A} = \mathcal{F}(\boldsymbol{\Psi}) = (\hat k_1,\dots,\hat k_{1+\gamma}).
 \end{equation}
 
-Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer.
-For a token $t_i$ with hidden state $\mathbf{x}_{L,i}$ at layer $L$, the standard routing computes gating weights $\mathcal{G}_{L,i,j} = \operatorname{Norm}(\operatorname{TopK}(\operatorname{Gate}(\mathbf{x}_{L,i}), k))_j$.
-Spec-K applies a straightforward zero-masking based on the allocated budget $\hat k_i$:
+Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer. To describe this operation, we fix an arbitrary MoE layer and suppress the request and layer indices, writing $\mathcal{R}_i$ for the ordered route $\mathcal{R}_{L,b,i}$ defined in Sec.~\ref{sec:bg:moe-serving}. Spec-K retains the prefix selected by the allocated budget:
 \begin{equation}
-\hat{\mathcal{G}}_{L,i,j} =
-\begin{cases}
-\mathcal{G}_{L,i,j}, & j\le\hat{k}_i\\
-0, & \text{otherwise}
-\end{cases}
+\hat{\mathcal{R}}_i = \operatorname{Prefix}_{\hat k_i}(\mathcal{R}_i),
+\quad i=1,\dots,1+\gamma,
 \end{equation}
-This modification ensures that tokens with a reduced budget $\hat k_i$ activate only the top $\hat k_i$ experts, leaving the rest unused without affecting the weight normalization of the active experts, if any.
+where $\operatorname{Prefix}_m$ retains the first $m$ expert-weight entries of an ordered route. Thus, a token with budget $\hat k_i$ activates only its top $\hat k_i$ experts while preserving their routing order and associated weights.
 
 The benefits of this adaptive allocation are directly reflected in the system cost $\mathcal{C}(\mathbf{A})$.
 In MoE routing, both expert computation (FLOPs) and dispatch/combine communication scale approximately linearly with the number of activated experts.
-Consequently, the resource cost of a verification step satisfies $\mathcal{C}(\mathbf{A}) \propto \sum_i \hat k_i$.
+Consequently, the resource cost of a verification step satisfies $\mathcal{C}(\mathbf{A}) \propto \sum_{i=1}^{1+\gamma} \hat k_i$.
 By reducing $\hat k_i$ for low-uncertainty tokens, Spec-K directly lowers both the computational load and the cross-device communication traffic during verification.
 
 In practice, this preview-guided allocation can also improve speculative acceptance 
