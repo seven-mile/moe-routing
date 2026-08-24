@@ -10,6 +10,8 @@ from matplotlib.patches import Rectangle
 
 plt.rcParams.update(
     {
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
         "font.family": "sans-serif",
         "font.sans-serif": ["DejaVu Sans", "Liberation Sans", "Arial", "sans-serif"],
         "font.size": 9.5,
