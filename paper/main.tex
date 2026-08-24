@@ -789,6 +789,20 @@ These differences imply that phase-aware allocation policies may further improve
 
 Overall, these results show that routing policies learned from a single task transfer well across related workloads, while leaving room for further gains through phase-specific adaptation.
 
+\subsection{Portability on Ascend NPUs}
+\label{sec:evaluation:ascend}
+
+We further evaluate Spec-K with vLLM-Ascend~\cite{huawei2024vllmascend} to study portability across accelerator and serving stacks. The experiment uses Qwen3-30B-A3B, a standalone Qwen3-0.6B draft model, and ShareGPT requests on an 8-NPU EP-8 deployment, with 7 draft candidates per verification step. Spec-K and SpecDecode use identical configurations at each offered load. Throughput is normalized to SpecDecode at 128 concurrent requests.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
+\caption{Normalized end-to-end throughput on an 8-NPU Ascend platform, using SpecDecode at 128 concurrent requests as the common reference. Labels report Spec-K Optimum speedup; the 512-request setting experiences KV-cache capacity pressure.}
+\label{fig:ascend_throughput}
+\end{figure}
+
+Figure~\ref{fig:ascend_throughput} shows end-to-end speedups of $1.14\times$, $1.29\times$, $1.32\times$, and $1.10\times$ across the four tested loads. The same preview-guided dynamic Top-$k$ mechanism therefore remains effective on a distinct accelerator and serving ecosystem.
+
 % \subsection{Case Study: Self-Regulation in Long Generation} \label{sec:evaluation:self-regulation}
 
 % % figure: Top-k vs token position
