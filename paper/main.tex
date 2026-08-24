@@ -552,7 +552,7 @@ We consider Qwen3-30B-A3B and Qwen3-235B-A22B as target models, paired with Qwen
 Throughput is measured as tokens per second over the entire serving process.
 
 Figure~\ref{fig:throughput_end2end} shows that Spec-K consistently improves throughput across all batch sizes and system configurations. 
-The Lossless and Optimum policies achieve up to $1.44\times$ and $1.72\times$ speedup over the SpecDecode baseline, respectively. 
+The Lossless and Optimum policies achieve up to $1.48\times$ and $1.72\times$ speedup over the SpecDecode baseline, respectively.
 Notably, the improvement holds across both model scales and EP degrees, indicating that the benefit is robust to system and model variations.
 
 The gain becomes more pronounced at larger batch sizes and higher EP degrees. 
@@ -583,7 +583,7 @@ This suggests that Spec-K not only improves single-node efficiency, but also mit
     }
 
     \caption{Latency breakdown of the verification step for SpecDecode and Spec-K (Optimum policy).
-Spec-K reduces latency across all major components, including computation (GroupGEMM) and communication (Dispatch and Combine).
+Spec-K reduces total latency in both settings, including computation (GroupGEMM) and aggregate communication (Dispatch and Combine).
 The reduction closely follows the decrease in routing budget, with additional gains from improved kernel efficiency.}
     \label{fig:overall_latency_breakdown}
 \end{figure}
@@ -613,9 +613,27 @@ To understand the source of the end-to-end speedup, we analyze the latency of th
 
 We profile the decoding of 32 tokens under offline inference with simultaneous request issuance to minimize scheduling effects. Two representative settings are considered: (1) Qwen3-30B-A3B with EP=8 at global batch size 1024 (intra-node), and (2) Qwen3-235B-A22B with EP=32 at global batch size 2048 (inter-node).
 
-Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K consistently reduces latency across all major components. GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
+Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
-Communication overhead is also reduced. Dispatch latency closely follows the reduction in routing volume, while Combine latency improves more moderately. Notably, Combine latency substantially exceeds Dispatch latency in both settings, primarily due to inter-GPU synchronization, reflecting the overhead induced by load imbalance in MoE computation. The observed reduction in Combine latency indicates that Spec-K does not degrade EP load balance.
+% CR-LAYOUT: This attribution paragraph can be shortened during final pagination.
+Communication overhead is also reduced. In inter-node EP-32, Dispatch latency falls by 40.9\%, closely matching the 38.6\% reduction in routing volume; under intra-node NVLink, Dispatch is negligible. More importantly, Combine latency is $2.9\times$--$15.6\times$ that of Dispatch and falls by 16.4\%--43.7\% under Spec-K. Because Combine includes inter-device synchronization after expert computation, its substantial latency exposes the critical-path cost of EP load imbalance.
+
+Table~\ref{tab:ep_load_balance} directly characterizes Spec-K's effect on EP load imbalance in an EP-32 GSM8K sweep. It reports two complementary metrics: busiest-device work, measured as the maximum number of token--expert assignments per target-model decode layer position and normalized to SpecDecode, and EP imbalance, measured as the maximum-to-mean assignment ratio across devices. Lossless and Optimum reduce busiest-device work to $0.68\times$ and $0.59\times$ of SpecDecode, respectively, while EP imbalance changes from $1.47\times$ to $1.55\times$. Thus, the busiest device receives substantially less work under both policies despite the modest increase in relative imbalance.
+
+\begin{table}[t]
+\caption{EP-32 busiest-device work and load imbalance.}
+\label{tab:ep_load_balance}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric} & \textbf{Baseline} & \textbf{Lossless} & \textbf{Optimum} \\
+\midrule
+Busiest-device work & $1.00\times$ & $0.68\times$ & $0.59\times$ \\
+EP imbalance (max/mean) & $1.47\times$ & $1.55\times$ & $1.55\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Overall, the components accelerated by Spec-K account for 80--90\% of the total verification latency, indicating that the method directly targets the dominant bottlenecks in the system. 
 These results demonstrate that routing sparsity introduced by Spec-K translates effectively into both computation and communication savings at the system level.
