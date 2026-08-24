@@ -665,7 +665,7 @@ Together, these factors contribute to the overall throughput improvement observe
 
 \subsection{Quality--Efficiency Tradeoff and Generalization}
 
-\subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
+\subsubsection{Comparison with Fixed-Layer Allocation}
 
 % figure: pareto frontiers of 6 settings
 
@@ -720,12 +720,15 @@ Limited routing redundancy for $k=4$
         \includegraphics[width=0.31\textwidth]{pareto/glm47flash_mtp_gsm8k_cot.pdf}
     }
 
-    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline.
+    \caption{Quality--efficiency Pareto frontiers across diverse model architectures, drafting methods, and tasks. The gray region and black error bar indicate the variability (±1 std) of the baseline; the three gold crosses in (a) mark fixed lower-layer controls.
 All settings exhibit a consistent tradeoff structure: a plateau region with negligible quality loss followed by a sharp degradation beyond a critical routing threshold.
 Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
     \label{fig:frontiers}
 \end{figure*}
 
+To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k_{\mathrm{fixed}}$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
+
+\subsubsection{Tradeoff Structure via Pareto Frontier} \label{sec:evaluation:pareto}
 
 We analyze the quality--efficiency tradeoff of Spec-K across diverse model architectures, drafting methods, and tasks.
 

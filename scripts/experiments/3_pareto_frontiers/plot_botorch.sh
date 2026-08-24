@@ -31,10 +31,14 @@ run_case "$RESULT_DIR/optimization_results_lmeval_235b_0b6_gsm8k_cot.json" \
     --baseline_topk 8 \
     --legend_pdf "$LEGEND_PDF"
 
+# Valid full runs: n36,k3; n42,k4; n24,k2. Exclude bug-contaminated n48,k4.
 run_case "$RESULT_DIR/optimization_results_lmeval_30b_0b6_gsm8k_cot.json" \
     --baseline_score 90.17 \
     --baseline_score_std 0.81 \
     --baseline_topk 8 \
+    --fixed_layer_point 5.852641 86.4291 \
+    --fixed_layer_point 6.010569 88.9310 \
+    --fixed_layer_point 6.282080 86.9598 \
 
 run_case "$RESULT_DIR/optimization_results_lmeval_30b_0b6_gsm8k_cot_neo.json" \
     --baseline_score 90.17 \
