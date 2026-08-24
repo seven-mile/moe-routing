@@ -422,15 +422,16 @@ To validate the generality of our approach, we implement Spec-K across four repr
 
 A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
 
-% \subsection{Vectorized Policy Execution}
+% CR-LAYOUT: This subsection may be dropped if final pagination requires it.
+\subsection{Vectorized Policy Execution}
 
-% In serving systems that employ continuous batching~\cite{yu2022orca}, allocation policies must be computed per request. A naïve implementation would launch a separate kernel for each request's piecewise policy evaluation, incurring significant kernel launch overhead and potential host--device synchronization stalls. To eliminate this overhead from the critical path, we fuse the entire policy computation into a single Triton~\cite{tillet2019triton} kernel that operates over all tokens in the batch concurrently. With this vectorized implementation, policy calculation accounts for less than $0.1\%$ of total execution time in typical deployment configurations.
+Continuous batching may combine requests using different policies. We fuse draft-distribution entropy, per-request threshold lookup, and token-wise routing-budget assignment into a single Triton~\cite{tillet2019triton} kernel over all candidate tokens, amortizing policy-evaluation launch overhead across the batch.
 
 \subsection{Adaptive Kernel Support}
 
-Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert, and we observe no significant degradation in load balance under Spec-K's adaptive routing budgets.
+Realizing the theoretical speedup of reduced routing budgets requires kernel implementations that are aware of inactive computation. For the expert computation itself, GroupGEMM kernels are natively designed to handle varying token counts per expert. Section~\ref{sec:evaluation:end2end} quantifies both the resulting absolute critical-path reduction and the change in relative load imbalance.
 
-The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the workload partitioning assumes that each input token generates a fixed number of $k$ communication tokens. When routing budgets vary across tokens under Spec-K, this fixed partitioning leads to warp-level imbalance. We augment the workload partitioning with adaptive rebalancing that accounts for per-token budget variations. Microbenchmarks confirm that this adjustment brings observed communication latency into closer alignment with the theoretical reduction in communication volume.
+The primary challenge lies in the device-side All-to-All collectives used for expert-parallel dispatch and combine. In implementations such as PPLX~\cite{nandor2025pplxkernels}, the communication kernel is organized around a fixed per-token fan-out of $k$. With variable routing budgets, a slot-wise work mapping can leave warps assigned to inactive expert destinations without useful work, reducing eligible-warp parallelism and latency hiding. We use budget-aware work partitioning to redistribute active communication work across resident warps while suppressing transfers to inactive destinations, so the communicated payload scales with each token's allocated budget without underutilizing the remaining parallelism.
 
 \section{Evaluation} \label{sec:evaluation}
 
