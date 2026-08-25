@@ -228,7 +228,7 @@ Its structure depends on the adaptation target: a vector of expert counts for Mo
 The target model interprets $\mathbf{A}$ to modulate per-token resource usage, while model weights remain unchanged.
 
 Executing with plan $\mathbf{A}$ incurs a system cost $\mathcal{C}(\mathbf{A})$, whose form depends on the resource being controlled. 
-Adaptive allocation seeks to minimize $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint.
+For a given workload distribution, adaptive allocation seeks to minimize the expected system cost $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint.
 
 RASP thus defines a compositional design space along three axes: the choice of preview signal $\Psi$, the design of allocation policy $\mathcal{F}$, and the structure of the allocation plan $\mathbf{A}$. 
 In this work, we instantiate RASP for MoE routing using uncertainty-based preview signals, resulting in \textbf{Spec-K}.
@@ -331,7 +331,7 @@ Its solution is characterized by a Pareto frontier, which exposes a diverse set 
 The search is performed over the threshold parameters $\{a_i\}$ in $f(\cdot)$, which carry the monotonicity constraint in Eq.~(\ref{eq:monotonicity}).
 To optimize over this constrained space, we represent the thresholds as cumulative products, with the first factor setting the largest threshold and each subsequent factor constrained to $[0,1]$; the ordering of $\{a_i\}$ is then ensured by construction.
 
-We use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
+During offline calibration, we use a standard multi-objective Bayesian optimization procedure to explore this space, implemented with Gaussian process-based optimization in BoTorch~\cite{balandat2020botorch} and a hypervolume-based acquisition function.
 Each candidate policy is evaluated using an automated benchmarking pipeline based on~\cite{gao2024evalharness}, returning both benchmark score and average Top-$k$.
 
 In practice, we use a low-dimensional parameterization (typically 5--6 parameters for $k=8$ by disabling the leading over-aggressive positions), which keeps the search efficient; the overall cost is dominated by model inference during evaluation.
