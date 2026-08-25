@@ -148,6 +148,9 @@ For a batch of tokens indexed by $i$, the system workload also depends on the se
 \end{equation*}
 The size of $\mathcal{U}_L$ determines how many experts must be materialized during execution, directly impacting memory footprint, communication volume, and the efficiency of grouped execution.
 
+The aggregate assignment count is not the only determinant of latency.
+Since experts execute in parallel, the most heavily loaded device can determine the critical path, making the distribution of assignments across devices relevant as well.
+
 In practice, both communication cost and expert computation scale approximately linearly with the routing budget $k$, making Top-$k$ a key control knob for system efficiency.
 
 \subsection{Speculative Decoding}
@@ -204,8 +207,7 @@ This adaptive mechanism yields systematic speedups through reduced computation a
 \subsection{RASP: Resource Allocation via Speculative Preview} \label{sec:method:rasp_framework}
 
 We formalize \textbf{Resource Allocation via Speculative Preview (RASP)} as a general framework for adaptive inference under token-level heterogeneity. 
-Consider a verification step where the target model processes $1+\gamma$ tokens: one prefix token and $\gamma$ draft-generated candidates $S_1,\dots,S_\gamma$. 
-RASP introduces a preview-guided mechanism that allocates computation prior to target execution.
+In a verification step, the target model processes one prefix token and $\gamma$ draft-generated candidates $S_1,\dots,S_\gamma$; RASP uses speculative preview to allocate computation before target execution.
 
 \begin{definition}[Preview Signal]
 A \emph{preview signal} $\Psi$ is obtained from the draft model before target execution. 
@@ -230,8 +232,7 @@ The target model interprets $\mathbf{A}$ to modulate per-token resource usage, w
 Executing with plan $\mathbf{A}$ incurs a system cost $\mathcal{C}(\mathbf{A})$, whose form depends on the resource being controlled. 
 For a given workload distribution, adaptive allocation seeks to minimize the expected system cost $\mathbb{E}[\mathcal{C}(\mathbf{A})]$ under a quality constraint.
 
-RASP thus defines a compositional design space along three axes: the choice of preview signal $\Psi$, the design of allocation policy $\mathcal{F}$, and the structure of the allocation plan $\mathbf{A}$. 
-In this work, we instantiate RASP for MoE routing using uncertainty-based preview signals, resulting in \textbf{Spec-K}.
+RASP defines a compositional design space over the preview signal $\Psi$, allocation policy $\mathcal{F}$, and allocation plan $\mathbf{A}$; its uncertainty-guided MoE instantiation is \textbf{Spec-K}.
 
 \subsection{Spec-K: A Dynamic Top-k Instantiation} \label{sec:method:spec_k}
 
@@ -510,6 +511,23 @@ We also evaluate weak scaling efficiency to assess distributed performance:
 
 Unless otherwise specified, we fix all dimensions and vary a single factor (e.g., batch size or EP degree) to isolate system-level effects.
 
+\begin{table}[!t]
+\renewcommand{\arraystretch}{1.2}
+\caption{Weak-scaling efficiency comparison.}
+\label{table:scaling_performance}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Configuration} & \textbf{30B EP 8 $\rightarrow$ 32} & \textbf{235B EP 16 $\rightarrow$ 32} \\
+ & (Local BS 64) & (Local BS 128) \\
+\midrule
+SpecDecode & 58.0\% & 88.5\% \\
+Spec-K Lossless & 71.3\% & 92.5\% \\
+Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 % End to End system perf: How fast are we? Does it scale?
 %   实验方法：使用 ShareGPT 数据集，vLLM 自带的 online serving benchmark 功能，控制并发请求数（max concurrency）以控制 Global Batch Size(EP8 64~1024, EP32 256~4096)，固定最大生成长度 1024（足以冲淡 Prefill 开销），使用 DeepEP 和 Triton Experts 实现的 MoE 算子，对不同模型组合（草稿模型都是 Qwen3-0.6B，目标模型有 Qwen3-30B-A3B 和 Qwen3-235B-A22B）、EP大小(EP8, EP16, EP32)的部署进行吞吐压测，统计最终吞吐和过程中的所有 token 的平均 topk 。（end2end主图只放了三个配置）
 %   Ans: 1.44-1.72x throughput improvements. More pronounced when using bigger global batch sizes, or bigger EP degrees. 额外分析：Weak scaling efficiency: Spec-K optimum > Spec-K lossless > specdecode baseline.
@@ -590,23 +608,6 @@ The reduction closely follows the decrease in routing budget, with additional ga
     \label{fig:overall_latency_breakdown}
 \end{figure}
 
-\begin{table}[!t]
-\renewcommand{\arraystretch}{1.2}
-\caption{Weak-scaling efficiency comparison.}
-\label{table:scaling_performance}
-\centering
-\begin{tabular}{lcc}
-\toprule
-\textbf{Configuration} & \textbf{30B EP 8 $\rightarrow$ 32} & \textbf{235B EP 16 $\rightarrow$ 32} \\
- & (Local BS 64) & (Local BS 128) \\
-\midrule
-SpecDecode & 58.0\% & 88.5\% \\
-Spec-K Lossless & 71.3\% & 92.5\% \\
-Spec-K Optimum  & \textbf{73.8\%} & \textbf{94.0\%} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
 \subsection{Where Does the Gain Come From?}
 
 \subsubsection{Latency Breakdown}
@@ -622,7 +623,7 @@ Communication overhead is also reduced. In inter-node EP-32, Dispatch latency fa
 
 Table~\ref{tab:ep_load_balance} directly characterizes Spec-K's effect on EP load imbalance in an EP-32 GSM8K sweep. It reports two complementary metrics: busiest-device work, measured as the maximum number of token--expert assignments per target-model decode layer position and normalized to SpecDecode, and EP imbalance, measured as the maximum-to-mean assignment ratio across devices. Lossless and Optimum reduce busiest-device work to $0.68\times$ and $0.59\times$ of SpecDecode, respectively, while EP imbalance changes from $1.47\times$ to $1.55\times$. Thus, the busiest device receives substantially less work under both policies despite the modest increase in relative imbalance.
 
-\begin{table}[t]
+\begin{table}[!h]
 \caption{EP-32 busiest-device work and load imbalance.}
 \label{tab:ep_load_balance}
 \centering
@@ -643,7 +644,7 @@ These results demonstrate that routing sparsity introduced by Spec-K translates 
 \subsubsection{Effect on Acceptance Rate}
 
 % figure: topk vs acceptance
-\begin{figure}[htbp]
+\begin{figure}[!t]
 \centerline{\includegraphics[width=0.8\linewidth]{total_topk_vs_acc.pdf}}
 \caption{Acceptance rate versus average routing budget (Top-$k$) for Qwen3-30B-A3B with Qwen3-0.6B on ShareGPT.
 Each point corresponds to a policy selected from the Pareto frontier.
@@ -651,24 +652,7 @@ Reducing the routing budget consistently increases acceptance across the evaluat
 \label{fig:topk_vs_acceptance}
 \end{figure}
 
-In addition to reducing per-step latency, Spec-K also improves the efficiency of speculative decoding by increasing the acceptance rate.
-
-To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B. 
-Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
-
-As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate.
-This suggests that more aggressive routing improves alignment between the draft and target models, allowing more draft tokens to be accepted per step.
-
-This trend is opposite to conventional expectations that reducing model capacity harms alignment, highlighting the unique effect of adaptive allocation.
-
-This effect complements the reduction in per-step latency: reduced routing lowers the cost of each verification step, while higher acceptance increases the number of tokens committed per target-model step. The quality results in Section~\ref{sec:evaluation:pareto} further show that Spec-K can realize both gains with negligible target-model accuracy loss. Together, lower verification cost and higher acceptance contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
-
-\subsection{Quality--Efficiency Tradeoff and Generalization}
-
-\subsubsection{Comparison with Fixed-Layer Allocation}
-
-% figure: pareto frontiers of 6 settings
-
+% Queue the full-width quality result for the next page.
 \begin{figure*}[t]
     \centering
 
@@ -725,6 +709,22 @@ All settings exhibit a consistent tradeoff structure: a plateau region with negl
 Spec-K identifies operating points along this frontier, including a lossless region and an optimal tradeoff point near the onset of the performance cliff.}
     \label{fig:frontiers}
 \end{figure*}
+
+In addition to reducing per-step latency, Spec-K also improves the efficiency of speculative decoding by increasing the acceptance rate.
+
+To study this effect, we evaluate the relationship between the average routing budget and acceptance rate on Qwen3-30B-A3B with Qwen3-0.6B.
+Each point corresponds to a policy selected from the Pareto frontier, executed on the ShareGPT dataset with a maximum generation length of 1024 tokens.
+
+As shown in Figure~\ref{fig:topk_vs_acceptance}, reducing the average Top-$k$ leads to a consistent increase in acceptance rate.
+This suggests that more aggressive routing improves alignment between the draft and target models, allowing more draft tokens to be accepted per step.
+
+This trend is opposite to conventional expectations that reducing model capacity harms alignment, highlighting the unique effect of adaptive allocation.
+
+This effect complements the reduction in per-step latency: reduced routing lowers the cost of each verification step, while higher acceptance increases the number of tokens committed per target-model step. The quality results in Section~\ref{sec:evaluation:pareto} further show that Spec-K can realize both gains with negligible target-model accuracy loss. Together, lower verification cost and higher acceptance contribute to the overall throughput improvement observed in Section~\ref{sec:evaluation:end2end}.
+
+\subsection{Quality--Efficiency Tradeoff and Generalization}
+
+\subsubsection{Comparison with Fixed-Layer Allocation}
 
 To isolate the value of the preview signal, we construct fixed lower-layer policies that reduce the first $n$ MoE layers to a constant $k_{\mathrm{fixed}}$ and preserve the trained Top-$k$ in all later layers, without using draft perplexity. On Qwen3-30B-A3B with Qwen3-0.6B and GSM8K-COT, all three controls shown in Figure~\ref{fig:frontiers}(a) are dominated by the Spec-K frontier. At the high-quality end, a fixed policy scores 88.93 at average Top-$k$ 6.01, whereas Spec-K scores 91.36 at the lower Top-$k$ of 5.97. Unconditional layer reduction exposes some redundancy, but preview-guided allocation finds a better quality--efficiency tradeoff in the same model and evaluation stack.
 
@@ -801,7 +801,7 @@ Overall, these results show that routing policies learned from a single task tra
 
 We further evaluate Spec-K with vLLM-Ascend~\cite{huawei2024vllmascend} to study portability across accelerator and serving stacks. The experiment uses Qwen3-30B-A3B, a standalone Qwen3-0.6B draft model, and ShareGPT requests on an 8-NPU EP-8 deployment, with 7 draft candidates per verification step. Spec-K and SpecDecode use identical configurations at each offered load. Throughput is normalized to SpecDecode at 128 concurrent requests.
 
-\begin{figure}[t]
+\begin{figure}[!h]
 \centering
 \includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
 \caption{Normalized end-to-end throughput on an 8-NPU Ascend platform, using SpecDecode at 128 concurrent requests as the common reference. Labels report Spec-K Optimum speedup; the 512-request setting experiences KV-cache capacity pressure.}
