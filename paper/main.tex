@@ -759,7 +759,7 @@ Overall, these results show that while the exact tradeoff curve varies across se
 
 \begin{table}[t]
 \centering
-\setlength{\tabcolsep}{8pt}
+\setlength{\tabcolsep}{7pt}
 \renewcommand{\arraystretch}{1.3}
 \caption{Cross-task transfer of policies calibrated on GSM8K-COT (score / Top-$k$).}
 \label{tab:transfer_accuracy}
@@ -873,8 +873,6 @@ These limitations suggest several directions. Richer preview signals (e.g., long
 
 More broadly, RASP suggests a shift in how inference efficiency is approached. Instead of treating computation as a fixed per-token budget to be optimized post hoc, it becomes a quantity that can be \emph{predicted and allocated on demand}. In this view, Spec-K represents one point in a larger design space of online, signal-driven inference methods, where efficiency emerges not from uniformly reducing computation, but from aligning it with the structure of the generation process itself.
 
-
-\newpage
 
 % \section{Ease of Use}
 
@@ -1092,6 +1090,7 @@ More broadly, RASP suggests a shift in how inference efficiency is approached. I
 % IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
 
 \bibliographystyle{IEEEtran}
+\IEEEtriggeratref{51}
 \bibliography{references}
 
 \end{document}
