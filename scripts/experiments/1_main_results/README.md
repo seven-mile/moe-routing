@@ -60,17 +60,17 @@ Install the host prerequisites and a uv version in the supported
 sudo apt-get update
 sudo apt-get install -y \
   build-essential ca-certificates curl git python3-pip \
-  libibverbs1 ibverbs-providers
+  libibverbs-dev librdmacm-dev rdma-core
 python3 -m pip install --user 'uv>=0.11.21,<0.12'
 export PATH="$HOME/.local/bin:$PATH"
 uv --version
 ```
 
-The two RDMA runtime packages provide `libibverbs.so.1`, `libmlx5.so.1`, and
-their dependencies. They are required because DeepEP low-latency mode enables
-NVSHMEM's IBGDA transport even for the required EP4 initialization. DeepEP
-uses NVSHMEM's unique-ID initialization, so MPI, PMI, and PMIx bootstrap
-packages are not required by this workflow.
+The RDMA packages provide the verbs and connection-manager development files,
+userspace providers, and core device setup required by NVSHMEM's IBGDA plugin.
+They are required because DeepEP low-latency mode enables IBGDA even for the
+required EP4 initialization. DeepEP uses NVSHMEM's unique-ID initialization,
+so MPI, PMI, and PMIx bootstrap packages are not required by this workflow.
 
 The Linux lock selects `nvidia-nvshmem-cu12==3.3.20`, which satisfies DeepEP's
 NVSHMEM 3.3.9 minimum and supplies its headers, host/device libraries, and IBGDA
