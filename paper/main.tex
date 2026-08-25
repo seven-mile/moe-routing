@@ -98,7 +98,7 @@ This abstraction decouples preview generation from policy design, enabling flexi
 
 Based on this principle, we introduce \textbf{Resource Allocation via Speculative Preview (RASP)}, a general framework for adaptive inference. 
 RASP decomposes the inference process into three components: (1) a \emph{preview signal} that estimates token difficulty, (2) a \emph{allocation policy} that maps this signal to a resource allocation plan, and (3) the \emph{adaptive target model execution} that realizes the allocation with speedup. 
-Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling training-free and zero-overhead adaptation.
+Unlike prior adaptive mechanisms that rely on intrinsic model states (e.g., intermediate activations or router confidence), RASP is distinguished by its use of external preview signals available before target computation, enabling lightweight and training-free adaptation.
 This abstraction enables fine-grained, online adjustment of compute budgets, allowing systems to allocate more resources to difficult tokens while reducing waste on easy ones. 
 Beyond MoE routing, the framework naturally extends to other forms of adaptive computation, such as sparse attention or layer skipping.
 
@@ -863,7 +863,7 @@ In contrast, Spec-K uses a draft signal available before target execution to var
 
 \section{Discussion and Conclusion}
 
-Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or incurring overhead.
+Spec-K is an instantiation of a broader principle: \emph{resource allocation should be decided before execution, guided by predictive signals}. Formalized as RASP, this decouples \emph{difficulty estimation} from \emph{computation allocation}, enabling anticipatory adaptation using preview signals available prior to the target forward pass, without modifying model internals or incurring substantial runtime overhead.
 
 Our results point to a consistent phenomenon: reducing the routing budget can improve both efficiency and speculative acceptance. This suggests that MoE inference operates in a regime of \emph{excess capacity but imperfect utilization}, where activating more experts does not necessarily improve draft--target alignment. Instead, adaptive sparsification acts as an implicit regularizer, suppressing low-contribution experts and yielding more consistent predictions. The observed Pareto structure---a wide plateau followed by a sharp degradation---indicates substantial redundancy for typical tokens, while a small subset of difficult tokens defines the capacity boundary. Spec-K exploits this asymmetry by reallocating resources toward high-uncertainty regions.
 
