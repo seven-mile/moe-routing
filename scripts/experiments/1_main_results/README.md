@@ -27,7 +27,7 @@ Appendix:
 ```bash
 git clone --recurse-submodules https://github.com/ParCIS/Spec-K.git
 cd Spec-K
-REVISION="sc26-ae-v2"
+REVISION="sc26-ae-v3"
 git checkout "$REVISION"
 git submodule update --init --recursive
 scripts/experiments/1_main_results/preflight.sh \
