@@ -422,7 +422,6 @@ To validate the generality of our approach, we implement Spec-K across four repr
 
 A pure algorithmic implementation---consisting of the allocation policy computation and the zero-masking of routing scores---is localized almost entirely within the speculative decoding logic. Across all frameworks, the core modifications amount to approximately 50--100 lines of code. When optimizing for end-to-end system throughput, additional care is required to ensure that masked expert positions are correctly elided from both computation and cross-device communication; this entails minor adjustments to kernel dispatch logic but does not require substantial code restructuring.
 
-% CR-LAYOUT: This subsection may be dropped if final pagination requires it.
 \subsection{Continuous Batching and Vectorized Policy Execution}
 \label{sec:implementation:policy-execution}
 
@@ -617,7 +616,6 @@ We profile the decoding of 32 tokens under offline inference with simultaneous r
 
 Figure~\ref{fig:overall_latency_breakdown} shows that Spec-K reduces total verification latency by 31\%--33\% in both settings. GroupGEMM and Combine latency decrease in both cases, and GroupGEMM speedup exceeds the theoretical expectation from average Top-$k$, indicating improved kernel efficiency under smaller expert sets.
 
-% CR-LAYOUT: This attribution paragraph can be shortened during final pagination.
 Communication overhead is also reduced. In inter-node EP-32, Dispatch latency falls by 40.9\%, closely matching the 38.6\% reduction in routing volume; under intra-node NVLink, Dispatch is negligible. More importantly, Combine latency is $2.9\times$--$15.6\times$ that of Dispatch and falls by 16.4\%--43.7\% under Spec-K. Because Combine includes inter-device synchronization after expert computation, its substantial latency exposes the critical-path cost of EP load imbalance.
 
 Table~\ref{tab:ep_load_balance} directly characterizes Spec-K's effect on EP load imbalance in an EP-32 GSM8K sweep. It reports two complementary metrics: busiest-device work, measured as the maximum number of token--expert assignments per target-model decode layer position and normalized to SpecDecode, and EP imbalance, measured as the maximum-to-mean assignment ratio across devices. Lossless and Optimum reduce busiest-device work to $0.68\times$ and $0.59\times$ of SpecDecode, respectively, while EP imbalance changes from $1.47\times$ to $1.55\times$. Thus, the busiest device receives substantially less work under both policies despite the modest increase in relative imbalance.
@@ -1092,7 +1090,7 @@ We thank all anonymous reviewers for their constructive feedback. This work is s
 % IEEE conference templates contain guidance text for composing and formatting conference papers. Please ensure that all template text is removed from your conference paper prior to submission to the conference. Failure to remove the template text from your paper may result in your paper not being published.
 
 \bibliographystyle{IEEEtran}
-\IEEEtriggeratref{51}
+\IEEEtriggeratref{50}
 \bibliography{references}
 
 \end{document}
