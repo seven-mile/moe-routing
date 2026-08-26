@@ -254,12 +254,12 @@ The allocation policy then maps this signal vector $\boldsymbol{\Psi}$ to a reso
 \mathbf{A} = \mathcal{F}(\boldsymbol{\Psi}) = (\hat k_1,\dots,\hat k_{1+\gamma}).
 \end{equation}
 
-Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer. For token $i$ at an arbitrary MoE layer, let $\mathcal{G}_{i,j}$, $j=1,\dots,k$, denote the routing weight at the $j$-th position of the standard Top-$k$ output, ordered by decreasing gate score. Spec-K applies zero-masking based on the allocated budget $\hat k_i$:
+Given the allocation plan $\mathbf{A}$, we realize dynamic routing by modifying the standard Top-$k$ gating mechanism in each MoE layer. For token $i$ at an arbitrary MoE layer, let $\mathcal{G}_{i,j}$, $j=1,\dots,k$, denote the routing weight at the $j$-th position of the standard Top-$k$ output, ordered by decreasing gate score. Spec-K applies zero-masking to this ordered output according to the allocated budget~$\hat k_i$:
 \begin{equation}
 \hat{\mathcal{G}}_{i,j} =
 \begin{cases}
-\mathcal{G}_{i,j}, & j\le\hat{k}_i\\
-0, & j>\hat{k}_i
+\mathcal{G}_{i,j}, & 1\le j\le\hat{k}_i,\\
+0, & \hat{k}_i<j\le k.
 \end{cases}
 \end{equation}
 Thus, a token with budget $\hat k_i$ activates only its top $\hat k_i$ experts while leaving the retained routing weights unchanged.
