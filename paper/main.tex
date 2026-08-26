@@ -802,8 +802,7 @@ We further evaluate Spec-K with vLLM-Ascend~\cite{huawei2024vllmascend} to study
 
 \begin{figure}[!h]
 \centering
-% TODO(camera-ready-layout): Crop excess whitespace after finalizing the Ascend figure and surrounding layout.
-\includegraphics[width=\linewidth]{ascend/normalized_throughput.pdf}
+\includegraphics[width=\linewidth,trim=12bp 8bp 2bp 12bp,clip]{ascend/normalized_throughput.pdf}
 \caption{Normalized end-to-end throughput on an 8-NPU Ascend platform, using SpecDecode at 128 concurrent requests as the common reference. Labels report Spec-K Optimum speedup; the 512-request setting experiences KV-cache capacity pressure.}
 \label{fig:ascend_throughput}
 \end{figure}
